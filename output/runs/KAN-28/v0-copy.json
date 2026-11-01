@@ -1,0 +1,31 @@
+{
+  "strings": {
+    "pantalla1": {
+      "title": "Tu conductor está en camino",
+      "subtitle": "Toyota Prius • ABC-1234 • 4.9 ★",
+      "eta": "Llega en 3 min",
+      "banner": null,
+      "cta": "Contactar"
+    },
+    "pantalla2": {
+      "title": "Sin conexión a internet",
+      "subtitle": "Comprueba tu red para seguir actualizando la ubicación de tu conductor en tiempo real.",
+      "eta": "Último ETA conocido: hace 2 min",
+      "banner": "Error de sincronización con el servidor",
+      "cta": "Reintentar conexión"
+    },
+    "pantalla3": {
+      "title": "Señal débil del conductor",
+      "subtitle": "La señal GPS del conductor se ha interrumpido temporalmente. Su vehículo sigue en la ruta prevista.",
+      "eta": "ETA aproximado sujeto a actualización",
+      "banner": "Aviso de señal GPS",
+      "cta": "Entendido"
+    }
+  },
+  "toneGuidelines": [
+    "Voz activa y directa",
+    "Sin culpar al usuario en errores",
+    "Sentence case en todos los titulares y etiquetas",
+    "Enfoque objetivo y claro sin elementos de relleno"
+  ]
+}

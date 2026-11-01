@@ -1,0 +1,341 @@
+{
+  "key": "KAN-28",
+  "ticket": {
+    "source": "jira",
+    "key": "KAN-28",
+    "externalId": "KAN-28",
+    "title": "Seguimiento de conductor en mapa tras solicitar servicio",
+    "description": "Contexto. Los usuarios demandan poder ver donde está el conductor después de solicitar un servicio.\nQué necesitamos. Después de solicitar un servicio, se debe mostrar en el mapa la ubicación exacta en la que se encuentra el conductor reduciendo el nivel de incertidumbre por parte del usuario.",
+    "labels": [
+      "diseño",
+      "uber-base"
+    ],
+    "reporter": "Omar Razola",
+    "url": "https://pruebasantigravity.atlassian.net/browse/KAN-28",
+    "attachments": []
+  },
+  "version": 0,
+  "status": "review",
+  "outputs": {
+    "brief": {
+      "objective": "Mostrar la ubicación exacta del conductor en el mapa tras solicitar un servicio para reducir la incertidumbre del usuario.",
+      "metric": "Reducción de cancelaciones anticipadas por parte del usuario y aumento en la satisfacción del seguimiento en tiempo real.",
+      "scope": [
+        "Visualización del mapa con la ubicación en tiempo real del conductor tras la asignación",
+        "BottomSheet informativo con los datos del conductor, vehículo y tiempo estimado de llegada (ETA)",
+        "Estados de error ante pérdida de conexión y recuperación automática"
+      ],
+      "outOfScope": [
+        "Modificación del flujo de solicitud previo",
+        "Chat o llamadas integradas (fuera del alcance de este ticket específico)"
+      ],
+      "happyPath": [
+        "El usuario solicita el servicio y la pantalla transiciona al mapa de seguimiento",
+        "Se visualiza la ruta y la posición exacta del conductor en tiempo real",
+        "El BottomSheet muestra el ETA actualizado, la información del vehículo y del conductor",
+        "El conductor llega al punto de encuentro y se actualiza el estado de la pantalla"
+      ],
+      "errorModes": [
+        "Pérdida de conexión de red que interrumpe la actualización de la ubicación del conductor",
+        "Fallo temporal en la sincronización del ETA con el servidor"
+      ],
+      "cornerCases": [
+        "Pérdida prolongada de señal GPS del conductor con aviso preventivo al usuario",
+        "Cambio de ruta imprevisto o desvío significativo del conductor"
+      ],
+      "platform": "app-movil",
+      "priority": "alta",
+      "estimatedScreens": 4,
+      "openQuestions": [
+        "¿Se requiere mostrar un botón directo de llamada o chat dentro del BottomSheet de seguimiento en esta versión?"
+      ],
+      "summary": "Diseño del flujo de seguimiento de conductor en mapa tras la solicitud de un servicio, utilizando componentes de Base Design System para mostrar la ubicación en tiempo real, ETA y datos del vehículo, contemplando casos de error por red y estados de excepción."
+    },
+    "context": {
+      "findings": [
+        {
+          "text": "El seguimiento en tiempo real requiere superficies flotantes (BottomSheet) para mantener el mapa visible y ofrecer acceso rápido a la información del conductor.",
+          "source": "base-ds"
+        },
+        {
+          "text": "La reducción de la incertidumbre se logra combinando elementos visuales de estado (Badge/Tag) con métricas numéricas claras (ETA en fuente monoespaciada).",
+          "source": "buenas-practicas"
+        }
+      ],
+      "tokens": {
+        "positive": "#0E8345",
+        "negative": "#DE1135",
+        "warning": "#F69E0C",
+        "primary": "#000000",
+        "backgroundSecondary": "#F6F6F6"
+      },
+      "reusableComponents": [
+        {
+          "name": "Card",
+          "use": "Contenedor principal de los datos del conductor y vehículo dentro del BottomSheet con radio de 8px"
+        },
+        {
+          "name": "Button",
+          "use": "Acciones principales y secundarias con esquinas redondeadas de 8px y variante Primary (#000000) o Secondary (#F6F6F6)"
+        },
+        {
+          "name": "Avatar",
+          "use": "Identificador fotográfico circular del conductor"
+        },
+        {
+          "name": "Badge",
+          "use": "Insignia numérica compacta para mostrar el ETA o estado de proximidad"
+        },
+        {
+          "name": "Banner",
+          "use": "Avisos de sistema para notificaciones críticas de red o pérdida de señal GPS con tonos negative y warning"
+        },
+        {
+          "name": "Sheet",
+          "use": "Panel inferior deslizable (BottomSheet) nativo para la interfaz móvil de seguimiento"
+        }
+      ],
+      "statePatterns": {
+        "errorHandling": "Banner negativo con token #DE1135 y fondo light (#FFF0EE) integrado en la parte superior del BottomSheet acompañado de un botón de reintento.",
+        "cornerCaseHandling": "Banner de advertencia con token #F69E0C y fondo light (#FDF2DC) para informar interrupciones prolongadas de señal GPS o desvíos de ruta."
+      },
+      "risks": [
+        "Retrasos en la sincronización de la posición del conductor que puedan generar falsas expectativas de tiempo real",
+        "Pérdida de conectividad móvil en zonas urbanas densas que interrumpa el flujo de seguimiento"
+      ]
+    },
+    "ux": {
+      "flow": [
+        "1-seguimiento-nominal",
+        "2-error-red",
+        "3-corner-case-gps"
+      ],
+      "screens": [
+        {
+          "step": 1,
+          "stateType": "happy_path",
+          "stateBadge": "HAPPY PATH",
+          "title": "Seguimiento en vivo del conductor",
+          "goal": "Mostrar la ubicación exacta en tiempo real del conductor en el mapa y los detalles del servicio para reducir la incertidumbre.",
+          "primaryAction": "Llamar o contactar"
+        },
+        {
+          "step": 2,
+          "stateType": "error",
+          "stateBadge": "CASO DE ERROR",
+          "title": "Pérdida de conexión de red",
+          "goal": "Avisar al usuario sobre la interrupción temporal en la actualización de la posición mediante un Banner negativo y permitir reintentar.",
+          "primaryAction": "Reintentar conexión"
+        },
+        {
+          "step": 3,
+          "stateType": "corner_case",
+          "stateBadge": "CORNER CASE",
+          "title": "Pérdida prolongada de señal GPS",
+          "goal": "Informar mediante un Banner de advertencia que la señal del conductor es débil y mostrar el último ETA conocido de forma segura.",
+          "primaryAction": "Entendido"
+        }
+      ],
+      "userStories": [
+        "Como usuario que acaba de solicitar un viaje, quiero ver la ubicación exacta del conductor en el mapa en tiempo real para reducir mi incertidumbre sobre cuándo llegará.",
+        "Como usuario experimentando fallos de red, quiero ver una advertencia clara y un botón de reintento para no perder el seguimiento del servicio.",
+        "Como usuario ante una pérdida de señal GPS del conductor, quiero recibir un aviso preventivo con el último estado conocido para mantener la calma."
+      ],
+      "acceptanceCriteria": [
+        "La pantalla muestra la ruta y la posición en tiempo real del conductor tras la asignación utilizando un BottomSheet con los datos del vehículo y el ETA.",
+        "Si ocurre una interrupción de red, se muestra un Banner negativo en la parte superior del BottomSheet con la opción de reintentar la sincronización.",
+        "Si el conductor pierde la señal GPS de forma prolongada, se muestra un Banner de advertencia informando al usuario sin bloquear la interfaz."
+      ],
+      "decisions": [
+        "Uso de una superficie flotante BottomSheet (`baseui/bottom-sheet`) para mantener el mapa visible en todo momento según las directrices del Base Design System.",
+        "Empleo de Banners específicos (`baseui/banner`) con tonos negative y warning para la gestión de errores de red y pérdida de señal GPS.",
+        "CERO botones de simulación en pantalla: todas las acciones son interacciones reales de producto como reintentar conexión o contactar."
+      ]
+    },
+    "copy": {
+      "strings": {
+        "pantalla1": {
+          "title": "Tu conductor está en camino",
+          "subtitle": "Toyota Prius • ABC-1234 • 4.9 ★",
+          "eta": "Llega en 3 min",
+          "banner": null,
+          "cta": "Contactar"
+        },
+        "pantalla2": {
+          "title": "Sin conexión a internet",
+          "subtitle": "Comprueba tu red para seguir actualizando la ubicación de tu conductor en tiempo real.",
+          "eta": "Último ETA conocido: hace 2 min",
+          "banner": "Error de sincronización con el servidor",
+          "cta": "Reintentar conexión"
+        },
+        "pantalla3": {
+          "title": "Señal débil del conductor",
+          "subtitle": "La señal GPS del conductor se ha interrumpido temporalmente. Su vehículo sigue en la ruta prevista.",
+          "eta": "ETA aproximado sujeto a actualización",
+          "banner": "Aviso de señal GPS",
+          "cta": "Entendido"
+        }
+      },
+      "toneGuidelines": [
+        "Voz activa y directa",
+        "Sin culpar al usuario en errores",
+        "Sentence case en todos los titulares y etiquetas",
+        "Enfoque objetivo y claro sin elementos de relleno"
+      ]
+    },
+    "ui": {
+      "screens": [
+        {
+          "step": 1,
+          "shortName": "1 · Seguimiento nominal",
+          "stateType": "happy_path",
+          "stateBadge": "HAPPY PATH",
+          "stateDesc": "Visualización del mapa y BottomSheet con la ubicación en tiempo real del conductor y ETA actualizado.",
+          "navTitle": "Viaje",
+          "mainTitle": "Tu conductor está en camino",
+          "mainSubtitle": "Toyota Prius • ABC-1234 • 4.9 ★",
+          "showMap": true,
+          "items": [],
+          "cards": [
+            {
+              "title": "Llega en 3 min",
+              "content": "Ubicación en tiempo real sincronizada",
+              "variant": "primary"
+            }
+          ],
+          "banner": null,
+          "cta": "Contactar",
+          "ctaVariant": "secondary"
+        },
+        {
+          "step": 2,
+          "shortName": "2 · Error de red",
+          "stateType": "error",
+          "stateBadge": "CASO DE ERROR",
+          "stateDesc": "Banner negativo ante interrupción de red con opción de reintentar sincronización.",
+          "navTitle": "Viaje",
+          "mainTitle": "Sin conexión a internet",
+          "mainSubtitle": "Comprueba tu red para seguir actualizando la ubicación de tu conductor en tiempo real.",
+          "showMap": true,
+          "items": [],
+          "cards": [
+            {
+              "title": "Último ETA conocido: hace 2 min",
+              "content": "Sincronización interrumpida con el servidor",
+              "variant": "secondary"
+            }
+          ],
+          "banner": {
+            "tone": "negative",
+            "text": "Error de sincronización con el servidor"
+          },
+          "cta": "Reintentar conexión",
+          "ctaVariant": "primary"
+        },
+        {
+          "step": 3,
+          "shortName": "3 · Corner case GPS",
+          "stateType": "corner_case",
+          "stateBadge": "CORNER CASE",
+          "stateDesc": "Banner de advertencia por pérdida prolongada de señal GPS del conductor.",
+          "navTitle": "Viaje",
+          "mainTitle": "Señal débil del conductor",
+          "mainSubtitle": "La señal GPS del conductor se ha interrumpido temporalmente. Su vehículo sigue en la ruta prevista.",
+          "showMap": true,
+          "items": [],
+          "cards": [
+            {
+              "title": "ETA aproximado sujeto a actualización",
+              "content": "El conductor mantiene su trayectoria estimada",
+              "variant": "secondary"
+            }
+          ],
+          "banner": {
+            "tone": "warning",
+            "text": "Aviso de señal GPS"
+          },
+          "cta": "Entendido",
+          "ctaVariant": "primary"
+        }
+      ],
+      "componentsUsed": [
+        "Button",
+        "Card",
+        "Banner",
+        "Sheet",
+        "Avatar",
+        "Badge"
+      ],
+      "tokensUsed": [
+        "--base-black",
+        "--base-white",
+        "--base-negative",
+        "--base-negative-light",
+        "--base-warning",
+        "--base-warning-light",
+        "--base-bg-secondary",
+        "--base-border-opaque",
+        "--base-content-primary",
+        "--base-content-secondary"
+      ]
+    },
+    "qa": {
+      "accessibilityScore": "WCAG AA superado",
+      "checks": [
+        {
+          "name": "Contraste de color",
+          "status": "ok",
+          "detail": "Supera 4.5:1 en todos los componentes de texto estándar y 3:1 en elementos de gran tamaño."
+        },
+        {
+          "name": "Áreas táctiles",
+          "status": "ok",
+          "detail": "Botones con altura mínima de 48px y elementos interactivos que cumplen o superan los 44x44px."
+        },
+        {
+          "name": "Resiliencia ante errores",
+          "status": "ok",
+          "detail": "Flujos de error y corner cases provistos de CTAs claros de recuperación sin callejones sin salida."
+        },
+        {
+          "name": "Roles ARIA",
+          "status": "ok",
+          "detail": "Banners informativos y de error configurados con role=\"alert\" y aria-live=\"assertive\"."
+        }
+      ],
+      "warnings": [],
+      "verdict": "Aprobado para desarrollo"
+    },
+    "delivery": {
+      "summary": "Flujo completo de producto con Happy Path, Casos de Error y Corner Cases",
+      "comment": "🤖 Propuesta de diseño con Uber Base DS lista para revisión\n\nResumen\n- Flujo interactivo completo con cobertura de Happy Path, Casos de Error y Corner Cases.\n- Componentes oficiales de base.uber.com aplicados.\n- WCAG AA verificado con áreas táctiles ≥ 44px.\n\nPrevisualización disponible en el visor interactivo.",
+      "handoffSpec": {
+        "happyPathSteps": [
+          1
+        ],
+        "cornerCaseSteps": [
+          3
+        ],
+        "errorCaseSteps": [
+          2
+        ],
+        "tokens": [
+          "--base-black",
+          "--base-white",
+          "--base-negative",
+          "--base-warning",
+          "--base-positive"
+        ]
+      }
+    }
+  },
+  "history": [
+    {
+      "version": 0,
+      "at": "2026-11-01T14:02:00.397Z",
+      "previewUrl": "http://localhost:8787/previews/KAN-28/v0/"
+    }
+  ],
+  "updatedAt": "2026-11-01T14:02:41.710Z",
+  "previewUrl": "http://localhost:8787/previews/KAN-28/v0/"
+}

@@ -1,0 +1,53 @@
+{
+  "findings": [
+    {
+      "text": "El seguimiento en tiempo real requiere superficies flotantes (BottomSheet) para mantener el mapa visible y ofrecer acceso rápido a la información del conductor.",
+      "source": "base-ds"
+    },
+    {
+      "text": "La reducción de la incertidumbre se logra combinando elementos visuales de estado (Badge/Tag) con métricas numéricas claras (ETA en fuente monoespaciada).",
+      "source": "buenas-practicas"
+    }
+  ],
+  "tokens": {
+    "positive": "#0E8345",
+    "negative": "#DE1135",
+    "warning": "#F69E0C",
+    "primary": "#000000",
+    "backgroundSecondary": "#F6F6F6"
+  },
+  "reusableComponents": [
+    {
+      "name": "Card",
+      "use": "Contenedor principal de los datos del conductor y vehículo dentro del BottomSheet con radio de 8px"
+    },
+    {
+      "name": "Button",
+      "use": "Acciones principales y secundarias con esquinas redondeadas de 8px y variante Primary (#000000) o Secondary (#F6F6F6)"
+    },
+    {
+      "name": "Avatar",
+      "use": "Identificador fotográfico circular del conductor"
+    },
+    {
+      "name": "Badge",
+      "use": "Insignia numérica compacta para mostrar el ETA o estado de proximidad"
+    },
+    {
+      "name": "Banner",
+      "use": "Avisos de sistema para notificaciones críticas de red o pérdida de señal GPS con tonos negative y warning"
+    },
+    {
+      "name": "Sheet",
+      "use": "Panel inferior deslizable (BottomSheet) nativo para la interfaz móvil de seguimiento"
+    }
+  ],
+  "statePatterns": {
+    "errorHandling": "Banner negativo con token #DE1135 y fondo light (#FFF0EE) integrado en la parte superior del BottomSheet acompañado de un botón de reintento.",
+    "cornerCaseHandling": "Banner de advertencia con token #F69E0C y fondo light (#FDF2DC) para informar interrupciones prolongadas de señal GPS o desvíos de ruta."
+  },
+  "risks": [
+    "Retrasos en la sincronización de la posición del conductor que puedan generar falsas expectativas de tiempo real",
+    "Pérdida de conectividad móvil en zonas urbanas densas que interrumpa el flujo de seguimiento"
+  ]
+}

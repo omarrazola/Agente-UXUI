@@ -1,0 +1,27 @@
+{
+  "accessibilityScore": "WCAG AA superado",
+  "checks": [
+    {
+      "name": "Contraste de color",
+      "status": "ok",
+      "detail": "Supera 4.5:1 en todos los componentes de texto estándar y 3:1 en elementos de gran tamaño."
+    },
+    {
+      "name": "Áreas táctiles",
+      "status": "ok",
+      "detail": "Botones con altura mínima de 48px y elementos interactivos que cumplen o superan los 44x44px."
+    },
+    {
+      "name": "Resiliencia ante errores",
+      "status": "ok",
+      "detail": "Flujos de error y corner cases provistos de CTAs claros de recuperación sin callejones sin salida."
+    },
+    {
+      "name": "Roles ARIA",
+      "status": "ok",
+      "detail": "Banners informativos y de error configurados con role=\"alert\" y aria-live=\"assertive\"."
+    }
+  ],
+  "warnings": [],
+  "verdict": "Aprobado para desarrollo"
+}

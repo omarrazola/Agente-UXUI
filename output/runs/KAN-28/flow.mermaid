@@ -1,0 +1,19 @@
+flowchart TD
+  classDef happy fill:#0E8345,stroke:#0B6635,color:#fff,stroke-width:2px;
+  classDef corner fill:#F69E0C,stroke:#C67A00,color:#fff,stroke-width:2px;
+  classDef err fill:#DE1135,stroke:#AB0D29,color:#fff,stroke-width:2px;
+  S1["1. 1 · Selección de servicio"]
+  class S1 happy;
+  S1 -->|"Continuar"| S2
+  S2["2. 2 · Opciones y preferencias"]
+  class S2 happy;
+  S2 -->|"Continuar"| S3
+  S3["3. 3 · Punto de recogida y pago"]
+  class S3 happy;
+  S3 -->|"Continuar"| S4
+  S4["4. 4 · Fallo de tarjeta (Recuperación guiada)"]
+  class S4 err;
+  S4 -->|"Continuar"| S5
+  S5["5. 5 · Conductor en camino y PIN"]
+  class S5 happy;
+  S5 -->|"Continuar"| S1

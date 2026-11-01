@@ -1,0 +1,96 @@
+{
+  "screens": [
+    {
+      "step": 1,
+      "shortName": "1 · Seguimiento nominal",
+      "stateType": "happy_path",
+      "stateBadge": "HAPPY PATH",
+      "stateDesc": "Visualización del mapa y BottomSheet con la ubicación en tiempo real del conductor y ETA actualizado.",
+      "navTitle": "Viaje",
+      "mainTitle": "Tu conductor está en camino",
+      "mainSubtitle": "Toyota Prius • ABC-1234 • 4.9 ★",
+      "showMap": true,
+      "items": [],
+      "cards": [
+        {
+          "title": "Llega en 3 min",
+          "content": "Ubicación en tiempo real sincronizada",
+          "variant": "primary"
+        }
+      ],
+      "banner": null,
+      "cta": "Contactar",
+      "ctaVariant": "secondary"
+    },
+    {
+      "step": 2,
+      "shortName": "2 · Error de red",
+      "stateType": "error",
+      "stateBadge": "CASO DE ERROR",
+      "stateDesc": "Banner negativo ante interrupción de red con opción de reintentar sincronización.",
+      "navTitle": "Viaje",
+      "mainTitle": "Sin conexión a internet",
+      "mainSubtitle": "Comprueba tu red para seguir actualizando la ubicación de tu conductor en tiempo real.",
+      "showMap": true,
+      "items": [],
+      "cards": [
+        {
+          "title": "Último ETA conocido: hace 2 min",
+          "content": "Sincronización interrumpida con el servidor",
+          "variant": "secondary"
+        }
+      ],
+      "banner": {
+        "tone": "negative",
+        "text": "Error de sincronización con el servidor"
+      },
+      "cta": "Reintentar conexión",
+      "ctaVariant": "primary"
+    },
+    {
+      "step": 3,
+      "shortName": "3 · Corner case GPS",
+      "stateType": "corner_case",
+      "stateBadge": "CORNER CASE",
+      "stateDesc": "Banner de advertencia por pérdida prolongada de señal GPS del conductor.",
+      "navTitle": "Viaje",
+      "mainTitle": "Señal débil del conductor",
+      "mainSubtitle": "La señal GPS del conductor se ha interrumpido temporalmente. Su vehículo sigue en la ruta prevista.",
+      "showMap": true,
+      "items": [],
+      "cards": [
+        {
+          "title": "ETA aproximado sujeto a actualización",
+          "content": "El conductor mantiene su trayectoria estimada",
+          "variant": "secondary"
+        }
+      ],
+      "banner": {
+        "tone": "warning",
+        "text": "Aviso de señal GPS"
+      },
+      "cta": "Entendido",
+      "ctaVariant": "primary"
+    }
+  ],
+  "componentsUsed": [
+    "Button",
+    "Card",
+    "Banner",
+    "Sheet",
+    "Avatar",
+    "Badge"
+  ],
+  "tokensUsed": [
+    "--base-black",
+    "--base-white",
+    "--base-negative",
+    "--base-negative-light",
+    "--base-warning",
+    "--base-warning-light",
+    "--base-bg-secondary",
+    "--base-border-opaque",
+    "--base-content-primary",
+    "--base-content-secondary"
+  ]
+}

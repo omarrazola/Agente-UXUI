@@ -1,0 +1,34 @@
+{
+  "objective": "Mostrar la ubicación exacta del conductor en el mapa tras solicitar un servicio para reducir la incertidumbre del usuario.",
+  "metric": "Reducción de cancelaciones anticipadas por parte del usuario y aumento en la satisfacción del seguimiento en tiempo real.",
+  "scope": [
+    "Visualización del mapa con la ubicación en tiempo real del conductor tras la asignación",
+    "BottomSheet informativo con los datos del conductor, vehículo y tiempo estimado de llegada (ETA)",
+    "Estados de error ante pérdida de conexión y recuperación automática"
+  ],
+  "outOfScope": [
+    "Modificación del flujo de solicitud previo",
+    "Chat o llamadas integradas (fuera del alcance de este ticket específico)"
+  ],
+  "happyPath": [
+    "El usuario solicita el servicio y la pantalla transiciona al mapa de seguimiento",
+    "Se visualiza la ruta y la posición exacta del conductor en tiempo real",
+    "El BottomSheet muestra el ETA actualizado, la información del vehículo y del conductor",
+    "El conductor llega al punto de encuentro y se actualiza el estado de la pantalla"
+  ],
+  "errorModes": [
+    "Pérdida de conexión de red que interrumpe la actualización de la ubicación del conductor",
+    "Fallo temporal en la sincronización del ETA con el servidor"
+  ],
+  "cornerCases": [
+    "Pérdida prolongada de señal GPS del conductor con aviso preventivo al usuario",
+    "Cambio de ruta imprevisto o desvío significativo del conductor"
+  ],
+  "platform": "app-movil",
+  "priority": "alta",
+  "estimatedScreens": 4,
+  "openQuestions": [
+    "¿Se requiere mostrar un botón directo de llamada o chat dentro del BottomSheet de seguimiento en esta versión?"
+  ],
+  "summary": "Diseño del flujo de seguimiento de conductor en mapa tras la solicitud de un servicio, utilizando componentes de Base Design System para mostrar la ubicación en tiempo real, ETA y datos del vehículo, contemplando casos de error por red y estados de excepción."
+}

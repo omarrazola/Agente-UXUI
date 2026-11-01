@@ -1,0 +1,84 @@
+{
+  "ticket": "KAN-28",
+  "version": "v1",
+  "approvedAt": "2026-11-01T19:02:36.526Z",
+  "summary": "Diseño móvil completo con Uber Base DS para seguimiento en vivo",
+  "tokens": {
+    "cta": "ink",
+    "radius": "md",
+    "density": "comfortable"
+  },
+  "screens": [
+    {
+      "step": 1,
+      "shortName": "1 · Selección de servicio",
+      "stateType": "happy_path",
+      "stateDesc": "",
+      "mainTitle": "Elige tu vehículo",
+      "mainSubtitle": "",
+      "cta": "Continuar",
+      "ctaTargetStep": null,
+      "secondaryCta": null
+    },
+    {
+      "step": 2,
+      "shortName": "2 · Opciones y preferencias",
+      "stateType": "happy_path",
+      "stateDesc": "",
+      "mainTitle": "Opciones de viaje",
+      "mainSubtitle": "",
+      "cta": "Continuar",
+      "ctaTargetStep": null,
+      "secondaryCta": null
+    },
+    {
+      "step": 3,
+      "shortName": "3 · Punto de recogida y pago",
+      "stateType": "happy_path",
+      "stateDesc": "",
+      "mainTitle": "Punto de recogida",
+      "mainSubtitle": "",
+      "cta": "Continuar",
+      "ctaTargetStep": null,
+      "secondaryCta": null
+    },
+    {
+      "step": 4,
+      "shortName": "4 · Fallo de tarjeta (Recuperación guiada)",
+      "stateType": "error",
+      "stateDesc": "",
+      "mainTitle": "Fallo de pago",
+      "mainSubtitle": "",
+      "cta": "Continuar",
+      "ctaTargetStep": null,
+      "secondaryCta": null
+    },
+    {
+      "step": 5,
+      "shortName": "5 · Conductor en camino y PIN",
+      "stateType": "happy_path",
+      "stateDesc": "",
+      "mainTitle": "Carlos está en camino",
+      "mainSubtitle": "",
+      "cta": "Continuar",
+      "ctaTargetStep": null,
+      "secondaryCta": null
+    }
+  ],
+  "components": [
+    "Header",
+    "Banner",
+    "Card",
+    "VehicleOption",
+    "PriceSummary",
+    "Stepper",
+    "SecurityPIN",
+    "MapCanvas",
+    "Button"
+  ],
+  "criteria": [
+    "El flujo responde a los tres puntos del brief",
+    "Los textos encajan con el tono de Uber Base",
+    "Las preguntas abiertas se han enviado a negocio"
+  ]
+}

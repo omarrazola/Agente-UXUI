@@ -1,0 +1,48 @@
+{
+  "flow": [
+    "1-seguimiento-nominal",
+    "2-error-red",
+    "3-corner-case-gps"
+  ],
+  "screens": [
+    {
+      "step": 1,
+      "stateType": "happy_path",
+      "stateBadge": "HAPPY PATH",
+      "title": "Seguimiento en vivo del conductor",
+      "goal": "Mostrar la ubicación exacta en tiempo real del conductor en el mapa y los detalles del servicio para reducir la incertidumbre.",
+      "primaryAction": "Llamar o contactar"
+    },
+    {
+      "step": 2,
+      "stateType": "error",
+      "stateBadge": "CASO DE ERROR",
+      "title": "Pérdida de conexión de red",
+      "goal": "Avisar al usuario sobre la interrupción temporal en la actualización de la posición mediante un Banner negativo y permitir reintentar.",
+      "primaryAction": "Reintentar conexión"
+    },
+    {
+      "step": 3,
+      "stateType": "corner_case",
+      "stateBadge": "CORNER CASE",
+      "title": "Pérdida prolongada de señal GPS",
+      "goal": "Informar mediante un Banner de advertencia que la señal del conductor es débil y mostrar el último ETA conocido de forma segura.",
+      "primaryAction": "Entendido"
+    }
+  ],
+  "userStories": [
+    "Como usuario que acaba de solicitar un viaje, quiero ver la ubicación exacta del conductor en el mapa en tiempo real para reducir mi incertidumbre sobre cuándo llegará.",
+    "Como usuario experimentando fallos de red, quiero ver una advertencia clara y un botón de reintento para no perder el seguimiento del servicio.",
+    "Como usuario ante una pérdida de señal GPS del conductor, quiero recibir un aviso preventivo con el último estado conocido para mantener la calma."
+  ],
+  "acceptanceCriteria": [
+    "La pantalla muestra la ruta y la posición en tiempo real del conductor tras la asignación utilizando un BottomSheet con los datos del vehículo y el ETA.",
+    "Si ocurre una interrupción de red, se muestra un Banner negativo en la parte superior del BottomSheet con la opción de reintentar la sincronización.",
+    "Si el conductor pierde la señal GPS de forma prolongada, se muestra un Banner de advertencia informando al usuario sin bloquear la interfaz."
+  ],
+  "decisions": [
+    "Uso de una superficie flotante BottomSheet (`baseui/bottom-sheet`) para mantener el mapa visible en todo momento según las directrices del Base Design System.",
+    "Empleo de Banners específicos (`baseui/banner`) con tonos negative y warning para la gestión de errores de red y pérdida de señal GPS.",
+    "CERO botones de simulación en pantalla: todas las acciones son interacciones reales de producto como reintentar conexión o contactar."
+  ]
+}

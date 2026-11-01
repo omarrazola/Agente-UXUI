@@ -1,0 +1,22 @@
+{
+  "summary": "Flujo completo de producto con Happy Path, Casos de Error y Corner Cases",
+  "comment": "🤖 Propuesta de diseño con Uber Base DS lista para revisión\n\nResumen\n- Flujo interactivo completo con cobertura de Happy Path, Casos de Error y Corner Cases.\n- Componentes oficiales de base.uber.com aplicados.\n- WCAG AA verificado con áreas táctiles ≥ 44px.\n\nPrevisualización disponible en el visor interactivo.",
+  "handoffSpec": {
+    "happyPathSteps": [
+      1
+    ],
+    "cornerCaseSteps": [
+      3
+    ],
+    "errorCaseSteps": [
+      2
+    ],
+    "tokens": [
+      "--base-black",
+      "--base-white",
+      "--base-negative",
+      "--base-warning",
+      "--base-positive"
+    ]
+  }
+}
