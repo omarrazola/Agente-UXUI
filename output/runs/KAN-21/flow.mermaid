@@ -1,0 +1,16 @@
+flowchart TD
+  classDef happy fill:#0E8345,stroke:#0B6635,color:#fff,stroke-width:2px;
+  classDef corner fill:#F69E0C,stroke:#C67A00,color:#fff,stroke-width:2px;
+  classDef err fill:#DE1135,stroke:#AB0D29,color:#fff,stroke-width:2px;
+  S1["1. 1 · Configuración de exportación"]
+  class S1 happy;
+  S1 -->|"Iniciar exportación"| S2
+  S2["2. 2 · Procesamiento y éxito"]
+  class S2 happy;
+  S2 -->|"Descargar archivo"| S4
+  S3["3. 3 · Caso de error de red o timeout"]
+  class S3 err;
+  S3 -->|"Reintentar exportación"| S2
+  S4["4. 4 · Confirmación de cierre"]
+  class S4 happy;
+  S4 -->|"Volver al inicio"| S1

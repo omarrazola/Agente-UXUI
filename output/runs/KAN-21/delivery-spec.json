@@ -1,0 +1,73 @@
+{
+  "ticket": "KAN-21",
+  "version": "v1",
+  "approvedAt": "2026-11-01T19:53:12.674Z",
+  "summary": "Flujo optimizado para la prueba de exportación de datos desde la herramienta con estados nominales, gestión de errores de formato y confirmación exitosa utilizando los componentes de Uber Base Design System.",
+  "tokens": {
+    "cta": "ink",
+    "radius": "md",
+    "density": "comfortable"
+  },
+  "screens": [
+    {
+      "step": 1,
+      "shortName": "1 · Configuración de exportación",
+      "stateType": "happy_path",
+      "stateDesc": "Pantalla inicial para seleccionar el formato y parámetros de exportación de datos.",
+      "mainTitle": "Preparar exportación",
+      "mainSubtitle": "Elige el formato de archivo en el que deseas recibir la información de tu cuenta.",
+      "cta": "Iniciar exportación",
+      "ctaTargetStep": 2,
+      "secondaryCta": null
+    },
+    {
+      "step": 2,
+      "shortName": "2 · Procesamiento y éxito",
+      "stateType": "happy_path",
+      "stateDesc": "Generación completada y archivo listo para su descarga en el dispositivo.",
+      "mainTitle": "Exportación completada",
+      "mainSubtitle": "Tu archivo se ha generado con éxito y está listo para descargarse.",
+      "cta": "Descargar archivo",
+      "ctaTargetStep": 4,
+      "secondaryCta": null
+    },
+    {
+      "step": 3,
+      "shortName": "3 · Caso de error de red o timeout",
+      "stateType": "error",
+      "stateDesc": "Incidencia durante la generación del archivo por problemas de conexión.",
+      "mainTitle": "No pudimos completar la exportación",
+      "mainSubtitle": "Ocurrió un problema de conexión al procesar los datos solicitados.",
+      "cta": "Reintentar exportación",
+      "ctaTargetStep": 2,
+      "secondaryCta": null
+    },
+    {
+      "step": 4,
+      "shortName": "4 · Confirmación de cierre",
+      "stateType": "happy_path",
+      "stateDesc": "Pantalla de confirmación tras finalizar y descargar el archivo correctamente.",
+      "mainTitle": "¡Todo listo!",
+      "mainSubtitle": "El archivo se ha descargado en tu dispositivo. Puedes cerrar esta ventana.",
+      "cta": "Volver al inicio",
+      "ctaTargetStep": 1,
+      "secondaryCta": null
+    }
+  ],
+  "components": [
+    "Header",
+    "Banner",
+    "Card",
+    "VehicleOption",
+    "PriceSummary",
+    "Stepper",
+    "SecurityPIN",
+    "MapCanvas",
+    "Button"
+  ],
+  "criteria": [
+    "El flujo responde al alcance y requerimientos del brief",
+    "Componentes y tokens 100% alineados con Uber Base DS",
+    "Accesibilidad WCAG 2.1 AA y criterios de diseño validados"
+  ]
+}

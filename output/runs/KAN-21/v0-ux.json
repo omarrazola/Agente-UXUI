@@ -1,0 +1,172 @@
+{
+  "summary": "Flujo completo de producto generado para: Petición de diseño",
+  "agents": {
+    "brief": {
+      "summary": "Alcance estructurado para UBER-402",
+      "logs": [
+        "Analizando requisitos del brief",
+        "Mapeando Happy Path y gestión de incidencias"
+      ],
+      "out": "<h4>Matriz de Alcance · UBER-402</h4><p><b>Objetivo:</b> Petición de diseño.</p>"
+    },
+    "context": {
+      "summary": "Tokens oficiales baseui",
+      "logs": [
+        "Tokens Base DS verificados"
+      ],
+      "out": "<h4>Tokens de Uber Base DS</h4><div class=\"flow\"><span>--base-black (#000000)</span><span>--base-positive (#0E8345)</span><span>--base-negative (#DE1135)</span></div>"
+    },
+    "ux": {
+      "summary": "Arquitectura adaptada al brief",
+      "logs": [
+        "Estructurando pantallas sin dead-ends"
+      ],
+      "out": "<h4>Arquitectura UX</h4><p>Flujo adaptado a la funcionalidad solicitada.</p>"
+    },
+    "copy": {
+      "summary": "Microcopy en voz oficial de Uber",
+      "logs": [
+        "Sentence case y tono constructivo"
+      ],
+      "out": "<h4>Microcopy</h4><p>Textos claros orientados a la acción.</p>"
+    },
+    "ui": {
+      "summary": "Componentes Base Web/Mobile",
+      "logs": [
+        "Componiendo con baseui"
+      ],
+      "out": "<h4>Componentes Base</h4><div class=\"flow\"><span>Modal</span><span>Drawer</span><span>Button</span><span>Banner</span></div>"
+    },
+    "qa": {
+      "summary": "Auditoría WCAG AA",
+      "logs": [
+        "Contraste y áreas táctiles auditadas"
+      ],
+      "out": "<h4>Auditoría QA</h4><p>WCAG 2.1 AA superado.</p>"
+    },
+    "delivery": {
+      "summary": "Handover para desarrollo y Figma",
+      "logs": [
+        "Especificación generada"
+      ],
+      "out": "<h4>Entrega</h4><p>Flujo listo para desarrollo.</p>"
+    }
+  },
+  "screens": [
+    {
+      "step": 1,
+      "shortName": "1 · Vista principal",
+      "stateType": "happy_path",
+      "stateBadge": "HAPPY PATH",
+      "stateDesc": "Estado nominal inicial para Petición de diseño",
+      "hint": "Inicio de la interacción",
+      "navTitle": "Servicio",
+      "mainTitle": "Petición de diseño",
+      "mainSubtitle": "Solución de diseño con tokens oficiales de Uber Base.",
+      "showMap": false,
+      "items": [
+        {
+          "title": "Opción principal",
+          "subtitle": "Configuración según requerimientos del brief",
+          "icon": "📋",
+          "highlight": true
+        }
+      ],
+      "cards": [
+        {
+          "label": "Estado",
+          "value": "Listo"
+        },
+        {
+          "label": "Sistema",
+          "value": "Base DS"
+        }
+      ],
+      "cta": "Continuar",
+      "ctaVariant": "primary",
+      "ctaTargetStep": 2,
+      "functionality": "Permite al usuario iniciar el proceso descrito en el brief.",
+      "designJustification": "Jerarquía limpia y directa centrada en la necesidad de producto."
+    },
+    {
+      "step": 2,
+      "shortName": "2 · Configuración / Detalle",
+      "stateType": "happy_path",
+      "stateBadge": "HAPPY PATH",
+      "stateDesc": "Pantalla interactiva con opciones del brief.",
+      "hint": "Configuración de preferencias",
+      "navTitle": "Detalles",
+      "mainTitle": "Opciones y confirmación",
+      "mainSubtitle": "Revisa los datos antes de completar la acción.",
+      "showMap": false,
+      "items": [],
+      "cards": [
+        {
+          "label": "Validación",
+          "value": "Correcta"
+        }
+      ],
+      "cta": "Confirmar acción",
+      "ctaVariant": "primary",
+      "ctaTargetStep": 3,
+      "functionality": "Recoge y confirma los parámetros solicitados.",
+      "designJustification": "Facilita la verificación antes de ejecutar la acción."
+    },
+    {
+      "step": 3,
+      "shortName": "3 · Gestión de incidencia",
+      "stateType": "error",
+      "stateBadge": "CASO DE ERROR",
+      "stateDesc": "Gestión de error con recuperación guiada sin callejones sin salida.",
+      "hint": "Resolución asistida",
+      "navTitle": "Atención requerida",
+      "mainTitle": "No se pudo completar la operación",
+      "mainSubtitle": "Comprueba tu conexión o vuelve a intentarlo.",
+      "showMap": false,
+      "items": [],
+      "cards": [],
+      "banner": {
+        "text": "Error puntual detectado: tus datos siguen a salvo",
+        "tone": "negative"
+      },
+      "cta": "Reintentar ahora",
+      "ctaVariant": "negative",
+      "ctaTargetStep": 2,
+      "functionality": "Ofrece vía de escape transparente y reintento directo.",
+      "designJustification": "Erradica el abandono con CTA contrastado."
+    },
+    {
+      "step": 4,
+      "shortName": "4 · Finalización",
+      "stateType": "happy_path",
+      "stateBadge": "HAPPY PATH",
+      "stateDesc": "Confirmación final del flujo.",
+      "hint": "Operación completada",
+      "navTitle": "Éxito",
+      "mainTitle": "Operación completada con éxito",
+      "mainSubtitle": "El proceso se ha guardado correctamente.",
+      "showMap": false,
+      "items": [],
+      "cards": [
+        {
+          "label": "Resultado",
+          "value": "Completado"
+        }
+      ],
+      "banner": {
+        "text": "Proceso completado satisfactoriamente",
+        "tone": "positive"
+      },
+      "cta": "Finalizar",
+      "ctaVariant": "primary",
+      "ctaTargetStep": 1,
+      "functionality": "Proporciona acuse de recibo y retorno seguro.",
+      "designJustification": "Cierra el ciclo de usuario con máxima certidumbre."
+    }
+  ],
+  "theme": {
+    "cta": "ink",
+    "radius": "rounded",
+    "density": "comfortable"
+  }
+}
