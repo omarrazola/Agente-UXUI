@@ -1,0 +1,92 @@
+{
+  "ticket": "KAN-29",
+  "version": "v1",
+  "approvedAt": "2026-11-02T20:54:18.954Z",
+  "summary": "Se añadió un botón secundario para finalizar la recarga en la pantalla 5 cumpliendo con las directrices de Base Design System.",
+  "tokens": {
+    "cta": "ink",
+    "radius": "md",
+    "density": "comfortable"
+  },
+  "screens": [
+    {
+      "step": 1,
+      "shortName": "1 · Mapa con puntos de recarga",
+      "stateType": "happy_path",
+      "stateDesc": "Vista de mapa principal mostrando electrolineras cercanas con disponibilidad en tiempo real",
+      "mainTitle": "Puntos de recarga cercanos",
+      "mainSubtitle": "Selecciona una estación en el mapa para ver conectores y tarifas.",
+      "cta": "Ver estación seleccionada",
+      "ctaTargetStep": 2,
+      "secondaryCta": null
+    },
+    {
+      "step": 2,
+      "shortName": "2 · Ficha plegada de estación",
+      "stateType": "happy_path",
+      "stateDesc": "Vista inferior colapsada (BottomSheet) con resumen rápido de la estación seleccionada",
+      "mainTitle": "EcoStation Central",
+      "mainSubtitle": "Av. Principal 452 • 4 conectores libres de 6 totales",
+      "cta": "Ver detalles y conectores",
+      "ctaTargetStep": 3,
+      "secondaryCta": null
+    },
+    {
+      "step": 3,
+      "shortName": "3 · Ficha desplegada y selección de conector",
+      "stateType": "happy_path",
+      "stateDesc": "Vista expandida del punto de recarga con listado completo de conectores y tarifas detalladas",
+      "mainTitle": "Selecciona un conector",
+      "mainSubtitle": "Todos los conectores disponibles en EcoStation Central.",
+      "cta": "Iniciar recarga",
+      "ctaTargetStep": 5,
+      "secondaryCta": {
+        "text": "Simular conector ocupado",
+        "variant": "secondary",
+        "targetStep": 4
+      }
+    },
+    {
+      "step": 4,
+      "shortName": "4 · Caso de error: Conector no disponible",
+      "stateType": "error",
+      "stateDesc": "Tratamiento de incidencia cuando el conector seleccionado se acaba de ocupar",
+      "mainTitle": "Conector no disponible",
+      "mainSubtitle": "El conector seleccionado acaba de ser ocupado por otro vehículo.",
+      "cta": "Elegir conector alternativo",
+      "ctaTargetStep": 3,
+      "secondaryCta": null
+    },
+    {
+      "step": 5,
+      "shortName": "5 · Recarga iniciada con éxito",
+      "stateType": "happy_path",
+      "stateDesc": "Confirmación y monitorización inicial de la sesión de recarga activa",
+      "mainTitle": "¡Recarga iniciada!",
+      "mainSubtitle": "La estación está suministrando energía correctamente a tu vehículo.",
+      "cta": "Ver detalles de la sesión",
+      "ctaTargetStep": 1,
+      "secondaryCta": {
+        "text": "Finalizar recarga",
+        "variant": "secondary",
+        "targetStep": 1
+      }
+    }
+  ],
+  "components": [
+    "Header",
+    "Banner",
+    "Card",
+    "VehicleOption",
+    "PriceSummary",
+    "Stepper",
+    "SecurityPIN",
+    "MapCanvas",
+    "Button"
+  ],
+  "criteria": [
+    "El flujo responde al alcance y requerimientos del brief",
+    "Componentes y tokens 100% alineados con Uber Base DS",
+    "Accesibilidad WCAG 2.1 AA y criterios de diseño validados"
+  ]
+}

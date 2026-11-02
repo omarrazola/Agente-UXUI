@@ -1,0 +1,21 @@
+flowchart TD
+  classDef happy fill:#0E8345,stroke:#0B6635,color:#fff,stroke-width:2px;
+  classDef corner fill:#F69E0C,stroke:#C67A00,color:#fff,stroke-width:2px;
+  classDef err fill:#DE1135,stroke:#AB0D29,color:#fff,stroke-width:2px;
+  S1["1. 1 · Mapa con puntos de recarga"]
+  class S1 happy;
+  S1 -->|"Ver estación seleccionada"| S2
+  S2["2. 2 · Ficha plegada de estación"]
+  class S2 happy;
+  S2 -->|"Ver detalles y conectores"| S3
+  S3["3. 3 · Ficha desplegada y selección de conector"]
+  class S3 happy;
+  S3 -->|"Iniciar recarga"| S5
+  S3 -.->|"Simular conector ocupado"| S4
+  S4["4. 4 · Caso de error: Conector no disponible"]
+  class S4 err;
+  S4 -->|"Elegir conector alternativo"| S3
+  S5["5. 5 · Recarga iniciada con éxito"]
+  class S5 happy;
+  S5 -->|"Ver detalles de la sesión"| S1
+  S5 -.->|"Finalizar recarga"| S1
