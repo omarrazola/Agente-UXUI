@@ -57,7 +57,7 @@
     return null;
   }
 
-  const sectionName = "🤖 Flujo de Orquestación · Albora Design Agents";
+  const sectionName = "🤖 Flujo de Orquestación · Uber Base Design Agents";
   const old = figma.currentPage.findOne((n) => n.name === sectionName);
   if (old) old.remove();
 
@@ -266,7 +266,7 @@
     badgeBg: "#EFF6FF",
     badgeColor: "#1E40AF",
     width: aW,
-    subtitle: "Alineación con Albora DS",
+    subtitle: "Alineación con Uber Base DS",
     borderColor: "#BFDBFE",
     items: [
       { text: "Entrada: Brief + components/README.md", icon: "📥", bold: true },
@@ -348,7 +348,7 @@
     subtitle: "Auditoría de accesibilidad y diseño",
     borderColor: "#A7F3D0",
     items: [
-      { text: "Entrada: Pantallas UI + Reglas Albora", icon: "📥", bold: true },
+      { text: "Entrada: Pantallas UI + Reglas Uber Base DS", icon: "📥", bold: true },
       { text: "Valida WCAG 2.1 AA y áreas táctiles", icon: "♿" },
       { text: "Salida JSON: checks, fixes, files", icon: "📤" },
       { text: "Aplica correcciones automáticas de código", icon: "🛠️", bold: true },

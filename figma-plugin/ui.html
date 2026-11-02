@@ -98,12 +98,23 @@
     </div>
   </div>
 
-  <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center">
+  <div class="card" style="padding: 10px 12px; margin-bottom: 10px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
       <span class="badge"><i class="dot" id="serverDot"></i> <span id="serverStatus">Buscando servidor...</span></span>
       <span id="ticketBadge" style="font-weight: 700; font-family: monospace">---</span>
     </div>
-    <div class="status-text" id="screensCountText">0 pantallas pendientes en servidor</div>
+    <div style="margin-bottom: 6px;">
+      <label for="serverHostSelect" style="font-size: 10.5px; font-weight: 600; color: #555; display: block; margin-bottom: 3px;">Listado de Localhost (Servidor):</label>
+      <select id="serverHostSelect" style="width: 100%; box-sizing: border-box; font-size: 11px; padding: 4px 6px; border: 1px solid #D1D5DB; border-radius: 6px; font-family: inherit; background: #FFF;">
+        <option value="http://localhost:8787/" selected>http://localhost:8787/ (Servidor Agente / Bridge)</option>
+        <option value="http://127.0.0.1:8787/">http://127.0.0.1:8787/ (Loopback Local)</option>
+        <option value="http://localhost:5173/">http://localhost:5173/ (Portal Web Vite)</option>
+        <option value="http://localhost:3001/">http://localhost:3001/ (Servidor Secundario)</option>
+        <option value="custom">Otro servidor (personalizado / IP de red)...</option>
+      </select>
+      <input type="text" id="customHostInput" placeholder="http://192.168.0.x:8787/" style="display: none; width: 100%; box-sizing: border-box; font-size: 11px; padding: 4px 6px; border: 1px solid #D1D5DB; border-radius: 6px; font-family: inherit; background: #FFF; margin-top: 4px;" />
+    </div>
+    <div class="status-text" id="screensCountText" style="margin-top: 4px;">0 pantallas pendientes en servidor</div>
   </div>
 
   <div class="card" style="padding: 10px 12px; margin-bottom: 10px; background: #FAFAFA;">
@@ -120,7 +131,7 @@
   </div>
 
   <button class="btn" id="renderBtn" disabled>
-    <span>🗺️</span> Importar Mapa de Flujo en Canva
+    <span>🗺️</span> Importar Mapa de Flujo en Canvas de Figma
   </button>
 
   <button class="btn" id="renderOrchestrationBtn" style="background:#4F46E5;margin-top:2px">
@@ -141,7 +152,7 @@
   </label>
 
   <div class="status-text" style="line-height: 1.4; border-top: 1px solid #E2E2E2; padding-top: 10px;">
-    Bridge activo conectado al portal en <code>http://localhost:5173</code>.<br>
+    Bridge activo conectado en <code id="activeHostDisplay">http://localhost:8787/</code>.<br>
     Cuando el agente envíe un diseño, se pintará en el canvas en tiempo real sin clics.
   </div>
 
@@ -149,6 +160,7 @@
     let latestData = null;
     let lastRenderedVersion = null;
     let ws = null;
+    let reconnectTimer = null;
 
     const dot = document.getElementById("serverDot");
     const statusText = document.getElementById("serverStatus");
@@ -156,67 +168,144 @@
     const renderBtn = document.getElementById("renderBtn");
     const ticketBadge = document.getElementById("ticketBadge");
     const autoCheck = document.getElementById("autoSyncCheck");
+    const hostSelect = document.getElementById("serverHostSelect");
+    const customHostInput = document.getElementById("customHostInput");
+    const activeHostDisplay = document.getElementById("activeHostDisplay");
+
+    function getSelectedHost() {
+      if (hostSelect && hostSelect.value === "custom") {
+        const customVal = customHostInput ? customHostInput.value.trim() : "";
+        if (customVal) return customVal.endsWith("/") ? customVal.slice(0, -1) : customVal;
+      }
+      const val = hostSelect ? hostSelect.value : "http://localhost:8787/";
+      return val.endsWith("/") ? val.slice(0, -1) : val;
+    }
+
+    function getSelectedWsUrl() {
+      const host = getSelectedHost();
+      if (host.includes(":5173")) {
+        return "ws://localhost:5173/ws/figma";
+      }
+      if (host.includes(":8787")) {
+        return host.replace(/^http/, "ws");
+      }
+      return host.replace(/^http/, "ws");
+    }
+
+    function scheduleReconnect() {
+      if (reconnectTimer) return;
+      dot.className = "dot";
+      statusText.textContent = "Reconectando WebSocket...";
+      reconnectTimer = setTimeout(function() {
+        reconnectTimer = null;
+        setupWebSocket();
+      }, 3000);
+    }
+
+    function attachWsHandlers(socketInstance) {
+      if (!socketInstance) return;
+      socketInstance.onmessage = async function(event) {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === "FIGMA_TARGET_UPDATED") {
+            setPluginTargetUI(msg.fileUrl, msg.fileKey, true);
+            return;
+          }
+          if (msg.type === "RENDER_ORCHESTRATION_FLOW") {
+            parent.postMessage({ pluginMessage: msg }, "*");
+            return;
+          }
+          if (msg.type === "RENDER_FLOW_MAP" || msg.type === "RENDER_SCREENS") {
+            ticketBadge.textContent = msg.key || "KAN";
+            if ((!msg.screenSvgs || msg.screenSvgs.length === 0) && Array.isArray(msg.screens) && msg.screens.length > 0) {
+              const currentHost = getSelectedHost();
+              try {
+                const res = await fetch(currentHost + "/api/figma/pending");
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data && Array.isArray(data.screenSvgs) && data.screenSvgs.length > 0) {
+                    msg.screenSvgs = data.screenSvgs;
+                    if (data.changelog) msg.changelog = data.changelog;
+                  }
+                }
+              } catch(e) {}
+            }
+            const count = (msg.screens && msg.screens.length) || (msg.screenSvgs && msg.screenSvgs.length) || 0;
+            countText.textContent = count + " pantallas recibidas vía MCP Push";
+            parent.postMessage({ pluginMessage: msg }, "*");
+          }
+        } catch(err) {
+          console.error("Error procesando mensaje WS:", err);
+        }
+      };
+
+      socketInstance.onclose = function() {
+        scheduleReconnect();
+      };
+
+      socketInstance.onerror = function() {
+        try { socketInstance.close(); } catch(e) {}
+      };
+    }
 
     function setupWebSocket() {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (ws) {
+        try {
+          ws.onclose = null;
+          ws.onerror = null;
+          ws.close();
+        } catch(e) {}
+        ws = null;
+      }
       try {
-        const wsUrl = "ws://localhost:5173/ws/figma";
-        ws = new WebSocket(wsUrl);
+        const primaryWs = getSelectedWsUrl();
+        ws = new WebSocket(primaryWs);
         ws.onopen = function() {
           dot.className = "dot live";
-          statusText.textContent = "Portal Conectado (5173)";
+          const port = primaryWs.includes("8787") ? "8787" : (primaryWs.includes("5173") ? "5173" : "OK");
+          statusText.textContent = "Conectado (" + port + ")";
+          if (activeHostDisplay) activeHostDisplay.textContent = getSelectedHost() + "/";
         };
-        ws.onerror = function() {
-          try {
-            ws = new WebSocket("ws://localhost:8787");
-            ws.onopen = function() {
-              dot.className = "dot live";
-              statusText.textContent = "Bridge Conectado";
-            };
-          } catch(e) {}
-        };
-
-        ws.onmessage = function(event) {
-          try {
-            const msg = JSON.parse(event.data);
-            if (msg.type === "FIGMA_TARGET_UPDATED") {
-              setPluginTargetUI(msg.fileUrl, msg.fileKey, true);
-              return;
-            }
-            if (msg.type === "RENDER_ORCHESTRATION_FLOW") {
-              parent.postMessage({ pluginMessage: msg }, "*");
-              return;
-            }
-            if (msg.type === "RENDER_FLOW_MAP" || msg.type === "RENDER_SCREENS") {
-              ticketBadge.textContent = msg.key || "KAN";
-              countText.textContent = (msg.screens ? msg.screens.length : 0) + " pantallas recibidas vía MCP Push";
-              parent.postMessage({ pluginMessage: msg }, "*");
-            }
-          } catch(err) {
-            console.error("Error procesando mensaje WS:", err);
-          }
-        };
-
-        ws.onclose = function() {
-          dot.className = "dot";
-          statusText.textContent = "Reconectando WebSocket...";
-          setTimeout(setupWebSocket, 2000);
-        };
-
-        ws.onerror = function() {
-          try { ws.close(); } catch(e) {}
-        };
+        attachWsHandlers(ws);
       } catch(e) {
-        setTimeout(setupWebSocket, 2000);
+        scheduleReconnect();
       }
+    }
+
+    if (hostSelect) {
+      hostSelect.addEventListener("change", function() {
+        if (hostSelect.value === "custom") {
+          if (customHostInput) customHostInput.style.display = "block";
+        } else {
+          if (customHostInput) customHostInput.style.display = "none";
+        }
+        if (activeHostDisplay) activeHostDisplay.textContent = getSelectedHost() + "/";
+        setupWebSocket();
+        pollAgentServer();
+      });
+    }
+
+    if (customHostInput) {
+      customHostInput.addEventListener("change", function() {
+        if (activeHostDisplay) activeHostDisplay.textContent = getSelectedHost() + "/";
+        setupWebSocket();
+        pollAgentServer();
+      });
     }
 
     async function pollAgentServer() {
       try {
+        const currentHost = getSelectedHost();
         let res;
         try {
-          res = await fetch("http://localhost:5173/api/figma/pending");
+          res = await fetch(currentHost + "/api/figma/pending");
         } catch(e) {
-          res = await fetch("http://localhost:8787/api/figma/pending");
+          const altHost = currentHost.includes("8787") ? "http://localhost:5173" : "http://localhost:8787";
+          res = await fetch(altHost + "/api/figma/pending");
         }
         if (!res.ok) throw new Error("HTTP " + res.status);
         const data = await res.json();
@@ -228,7 +317,8 @@
 
         if (!ws || ws.readyState !== WebSocket.OPEN) {
           dot.className = "dot live";
-          statusText.textContent = "Portal Online (5173)";
+          const port = currentHost.includes("8787") ? "8787" : "5173";
+          statusText.textContent = "Online (" + port + ")";
         }
         ticketBadge.textContent = data.key || "KAN";
 
@@ -249,7 +339,7 @@
         if (!ws || ws.readyState !== WebSocket.OPEN) {
           dot.className = "dot";
           statusText.textContent = "Desconectado";
-          countText.textContent = "Asegúrate de que el portal esté activo en http://localhost:5173";
+          countText.textContent = "Asegúrate de que el servidor esté activo en " + (hostSelect ? hostSelect.value : "http://localhost:8787/");
           renderBtn.disabled = true;
         }
       }
@@ -262,7 +352,8 @@
           type: "RENDER_FLOW_MAP",
           screenSvgs: latestData.screenSvgs || [],
           screens: latestData.screens || [],
-          key: latestData.key || "KAN-1"
+          key: latestData.key || "KAN-1",
+          changelog: latestData.changelog || null
         }
       }, "*");
     }
@@ -315,16 +406,18 @@
       saveUrlBtn.addEventListener("click", async function() {
         const url = targetInput ? targetInput.value.trim() : "";
         if (!url) return;
+        const currentHost = getSelectedHost();
         try {
           let res;
           try {
-            res = await fetch("http://localhost:5173/api/figma/target", {
+            res = await fetch(currentHost + "/api/figma/target", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ url: url })
             });
           } catch(e) {
-            res = await fetch("http://localhost:8787/api/figma/target", {
+            const altHost = currentHost.includes("8787") ? "http://localhost:5173" : "http://localhost:8787";
+            res = await fetch(altHost + "/api/figma/target", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ url: url })
@@ -353,14 +446,16 @@
         if (msg.fileUrl) {
           setPluginTargetUI(msg.fileUrl, msg.fileKey, true);
           const saveTarget = async () => {
+            const currentHost = getSelectedHost();
             try {
-              await fetch("http://localhost:5173/api/figma/target", {
+              await fetch(currentHost + "/api/figma/target", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ url: msg.fileUrl })
               });
             } catch(e) {
-              await fetch("http://localhost:8787/api/figma/target", {
+              const altHost = currentHost.includes("8787") ? "http://localhost:5173" : "http://localhost:8787";
+              await fetch(altHost + "/api/figma/target", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ url: msg.fileUrl })

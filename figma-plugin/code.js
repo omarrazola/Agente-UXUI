@@ -1,13 +1,14 @@
 // Plugin de Figma para renderizar el Mapa de Flujo completo vinculado a la librería Base DS
-figma.showUI(__html__, { width: 340, height: 480, title: "Uber Base Auto-Design Agent" });
+figma.showUI(__html__, { width: 340, height: 520, title: "Uber Base Auto-Design Agent" });
 
 async function loadFonts() {
-  try {
-    await figma.loadFontAsync({ family: "Inter", style: "Regular" });
-    await figma.loadFontAsync({ family: "Inter", style: "Medium" });
-    await figma.loadFontAsync({ family: "Inter", style: "Bold" });
-  } catch (e) {
-    console.warn("Fallo cargando fuente Inter:", e);
+  const styles = ["Regular", "Medium", "Semi Bold", "Bold", "Extra Bold", "Black"];
+  for (const style of styles) {
+    try {
+      await figma.loadFontAsync({ family: "Inter", style });
+    } catch (e) {
+      console.warn(`No se pudo precargar Inter ${style}:`, e);
+    }
   }
 }
 
@@ -350,12 +351,19 @@ async function createLocalStylesFromBaseTokens() {
 
 function makeText(str, size, weight, color, wrapWidth, role, semanticColorRole) {
   const t = figma.createText();
-  t.characters = str || "";
+  const fontStyle = weight || "Regular";
+  try {
+    t.fontName = { family: "Inter", style: fontStyle };
+  } catch (e) {
+    try {
+      t.fontName = { family: "Inter", style: "Regular" };
+    } catch (err) {}
+  }
   t.fontSize = size;
-  t.fontName = { family: "Inter", style: weight || "Regular" };
+  t.characters = str || "";
   if (color) t.fills = [{ type: "SOLID", color }];
 
-  const isBold = weight === "Bold" || weight === "SemiBold" || weight === "Medium";
+  const isBold = fontStyle.includes("Bold") || fontStyle.includes("Medium");
   const effectiveRole = role || (size >= 24 ? "display" : size >= 16 ? "heading" : size <= 10 ? "caption" : "body");
   applyTextStyle(t, effectiveRole, size, isBold);
 
@@ -1074,8 +1082,16 @@ async function populateNodeTexts(targetNode, textDictionary) {
 
   for (const tNode of textNodes) {
     try {
-      if (tNode.fontName) {
+      if (tNode.fontName && tNode.fontName !== figma.mixed) {
         await figma.loadFontAsync(tNode.fontName);
+      } else if (tNode.fontName === figma.mixed) {
+        const len = tNode.characters.length;
+        for (let i = 0; i < len; i++) {
+          const fn = tNode.getRangeFontName(i, i + 1);
+          if (fn && fn !== figma.mixed) {
+            await figma.loadFontAsync(fn);
+          }
+        }
       }
       const layerName = (tNode.name || "").toLowerCase();
       const currentText = (tNode.characters || "").trim().toLowerCase();
@@ -1264,8 +1280,7 @@ async function renderOfficialAnnotation(scrData, stepNum, totalSteps, width, par
     annotNode.name = "Anotación: " + displayTitle + " (103:525)";
     parentSection.appendChild(annotNode);
     annotNode.x = xPos;
-    const annotH = annotNode.height || 180;
-    annotNode.y = yPos - annotH - 16;
+    annotNode.y = 160;
     await populateNodeTexts(annotNode, annotTexts);
     bindLocalStylesToScreenNode(annotNode);
     return annotNode;
@@ -1336,7 +1351,7 @@ async function renderOfficialAnnotation(scrData, stepNum, totalSteps, width, par
 
   parentSection.appendChild(featCard);
   featCard.x = xPos;
-  featCard.y = yPos - featCard.height - 16;
+  featCard.y = 160;
   return featCard;
 }
 
@@ -1373,13 +1388,262 @@ async function getFlowArrowSpecs() {
   return specs;
 }
 
+// Fallback de renderizado vectorial idéntico al del agente en el servidor
+function renderScreenSvg(scr, idx, total) {
+  if (!scr) scr = {};
+  const isErr = scr.stateType === "error";
+  const isCorner = scr.stateType === "corner_case";
+  const stateColor = isErr ? "#DE1135" : (isCorner ? "#F69E0C" : "#0E8345");
+  const stateBg = isErr ? "#FDF0F2" : (isCorner ? "#FEF6E7" : "#EBF7EE");
+
+  let contentY = 90;
+  const elements = [];
+
+  // 1. Hero Image (si la pantalla lo especifica)
+  if (scr.heroImage && scr.heroImage.url) {
+    const clipId = `hero-clip-${idx}-${Math.floor(Math.random() * 10000)}`;
+    elements.push(`
+      <!-- Hero Image -->
+      <g id="Hero_Image">
+        <defs>
+          <clipPath id="${clipId}">
+            <rect x="20" y="${contentY}" width="335" height="140" rx="8" />
+          </clipPath>
+        </defs>
+        <rect x="20" y="${contentY}" width="335" height="140" rx="8" fill="#141414" stroke="#E2E2E2" stroke-width="1"/>
+        <image href="${escapeXml(scr.heroImage.url)}" x="20" y="${contentY}" width="335" height="140" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>
+        ${scr.heroImage.caption ? `
+          <rect x="20" y="${contentY + 104}" width="335" height="36" fill="rgba(0,0,0,0.72)" clip-path="url(#${clipId})"/>
+          <text x="32" y="${contentY + 127}" font-family="Inter, -apple-system, sans-serif" font-size="11.5" font-weight="600" fill="#FFFFFF">${escapeXml(scr.heroImage.caption)}</text>
+        ` : ""}
+      </g>
+    `);
+    contentY += 152;
+  }
+
+  // 2. Interactive Map Container (GPS / Radar / Seguimiento)
+  if (scr.showMap) {
+    const mm = scr.mapMeta || {};
+    elements.push(`
+      <!-- Map Container -->
+      <g id="Map_Canvas">
+        <rect x="20" y="${contentY}" width="335" height="165" rx="8" fill="#141414" stroke="#262626" stroke-width="1"/>
+        <line x1="20" y1="${contentY + 48}" x2="355" y2="${contentY + 48}" stroke="#1F1F1F" stroke-width="1"/>
+        <line x1="20" y1="${contentY + 105}" x2="355" y2="${contentY + 105}" stroke="#1F1F1F" stroke-width="1"/>
+        <line x1="120" y1="${contentY}" x2="120" y2="${contentY + 165}" stroke="#1F1F1F" stroke-width="1"/>
+        <line x1="240" y1="${contentY}" x2="240" y2="${contentY + 165}" stroke="#1F1F1F" stroke-width="1"/>
+        <!-- Route Line (Uber Blue) -->
+        <path d="M 50 ${contentY + 120} Q 150 ${contentY + 90} 210 ${contentY + 48} T 305 ${contentY + 38}" fill="none" stroke="#276EF1" stroke-width="4" stroke-dasharray="6,4"/>
+        <circle cx="50" cy="${contentY + 120}" r="6" fill="#276EF1"/>
+        <circle cx="305" cy="${contentY + 38}" r="7" fill="#000000" stroke="#FFFFFF" stroke-width="2"/>
+        <!-- Vehicle icon -->
+        <g transform="translate(190, ${contentY + 54})">
+          <circle cx="16" cy="16" r="18" fill="rgba(39, 110, 241, 0.3)"/>
+          <circle cx="16" cy="16" r="14" fill="#000000"/>
+          <text x="16" y="21" text-anchor="middle" font-size="14">🚗</text>
+        </g>
+        <!-- ETA Badge -->
+        <rect x="30" y="${contentY + 12}" width="125" height="26" rx="6" fill="${stateColor}"/>
+        <text x="92" y="${contentY + 29}" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="700" fill="#FFFFFF">${escapeXml(mm.badge || (isErr ? "Incidencia" : "En ruta"))}</text>
+        <!-- ETA Time -->
+        <rect x="275" y="${contentY + 12}" width="68" height="26" rx="6" fill="rgba(0,0,0,0.85)"/>
+        <text x="309" y="${contentY + 29}" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">${escapeXml(mm.eta || "3 min")}</text>
+        <!-- Driver Info Bar -->
+        <rect x="28" y="${contentY + 124}" width="319" height="32" rx="6" fill="rgba(0,0,0,0.88)"/>
+        <text x="40" y="${contentY + 144}" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#FFFFFF">${escapeXml(mm.driverName || "Carlos M.")} · ★ ${escapeXml(mm.rating || "4.95")}</text>
+        <text x="335" y="${contentY + 144}" text-anchor="end" font-family="Inter, -apple-system, sans-serif" font-size="11" fill="#AFAFAF">${escapeXml(mm.vehicle || "Toyota Corolla")}</text>
+      </g>
+    `);
+    contentY += 177;
+  }
+
+  // 3. Main Title and Subtitle
+  elements.push(`
+    <text x="24" y="${contentY + 18}" font-family="Inter, -apple-system, sans-serif" font-size="19" font-weight="800" fill="#000000">${escapeXml(scr.mainTitle || scr.shortName || "Pantalla")}</text>
+  `);
+  contentY += 26;
+
+  if (scr.mainSubtitle || scr.hint) {
+    const subText = scr.mainSubtitle || scr.hint;
+    elements.push(`
+      <text x="24" y="${contentY + 12}" font-family="Inter, -apple-system, sans-serif" font-size="12.5" font-weight="400" fill="#545454">${escapeXml(subText)}</text>
+    `);
+    contentY += 22;
+  }
+
+  // 4. Banner (Alert / Notification)
+  if (scr.banner && scr.banner.text) {
+    const bTone = scr.banner.tone || (isErr ? "negative" : isCorner ? "warning" : "info");
+    const bBg = bTone === "negative" ? "#FDF0F2" : (bTone === "warning" ? "#FEF6E7" : "#EBF7EE");
+    const bStroke = bTone === "negative" ? "#DE1135" : (bTone === "warning" ? "#F69E0C" : "#0E8345");
+    const bIcon = bTone === "negative" ? "⚠️ " : (bTone === "warning" ? "⚡ " : "ℹ️ ");
+
+    elements.push(`
+      <g id="Banner">
+        <rect x="20" y="${contentY}" width="335" height="40" rx="8" fill="${bBg}" stroke="${bStroke}" stroke-width="1.2"/>
+        <text x="32" y="${contentY + 25}" font-family="Inter, -apple-system, sans-serif" font-size="11.5" font-weight="600" fill="${bStroke}">${bIcon}${escapeXml(scr.banner.text)}</text>
+      </g>
+    `);
+    contentY += 48;
+  }
+
+  // 5. Items / Catalog / Service Options
+  const items = Array.isArray(scr.items) ? scr.items : [];
+  if (items.length > 0) {
+    items.forEach((it, itIdx) => {
+      const isHl = Boolean(it.highlight);
+      const strokeCol = isHl ? (isErr ? "#DE1135" : "#000000") : "#E2E2E2";
+      const strokeW = isHl ? "2" : "1";
+      const itTitle = it.title || it.name || it.label || it.vehicle || `Opción ${itIdx + 1}`;
+      const itSubtitle = it.subtitle || it.desc || it.description || "";
+      const itPrice = it.price || it.cost || it.amount || "";
+      const iconText = it.icon || (isErr ? "💳" : (scr.showMap ? "📍" : "🚗"));
+
+      elements.push(`
+        <g id="Item_${itIdx + 1}" transform="translate(20, ${contentY})">
+          <rect width="335" height="58" rx="8" fill="#FFFFFF" stroke="${strokeCol}" stroke-width="${strokeW}"/>
+          <rect x="12" y="11" width="36" height="36" rx="8" fill="${isErr ? "#FDF0F2" : "#F6F6F6"}"/>
+          <text x="30" y="35" text-anchor="middle" font-size="18">${escapeXml(iconText)}</text>
+          <text x="58" y="26" font-family="Inter, -apple-system, sans-serif" font-size="13.5" font-weight="700" fill="#000000">${escapeXml(itTitle)}</text>
+          ${itSubtitle ? `<text x="58" y="43" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="400" fill="#545454">${escapeXml(itSubtitle)}</text>` : ""}
+          ${itPrice ? `<text x="320" y="35" text-anchor="end" font-family="Inter, -apple-system, sans-serif" font-size="14" font-weight="700" fill="#000000">${escapeXml(itPrice)}</text>` : ""}
+        </g>
+      `);
+      contentY += 66;
+    });
+  }
+
+  // 6. Metric Cards (PIN, Matrícula, ETA)
+  const cards = Array.isArray(scr.cards) ? scr.cards : [];
+  if (cards.length > 0) {
+    const colW = (335 - 10) / 2;
+    elements.push(`<g id="Metric_Cards" transform="translate(20, ${contentY})">`);
+    cards.slice(0, 2).forEach((c, cIdx) => {
+      const cX = cIdx * (colW + 10);
+      const cdLabel = c.label || c.title || c.key || "Detalle";
+      const cdVal = c.value || c.subtitle || c.val || "";
+      const isValErr = isErr && /fallo|error|rechazad/i.test(cdVal);
+
+      elements.push(`
+        <rect x="${cX}" y="0" width="${colW}" height="54" rx="8" fill="#F6F6F6"/>
+        <text x="${cX + colW / 2}" y="20" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#545454">${escapeXml(cdLabel)}</text>
+        <text x="${cX + colW / 2}" y="42" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="15" font-weight="800" fill="${isValErr ? "#DE1135" : "#000000"}">${escapeXml(cdVal)}</text>
+      `);
+    });
+    elements.push(`</g>`);
+    contentY += 64;
+  }
+
+  // 7. Sticky Bottom Footer (Barra inferior con botones CTA sticky de Uber Base DS)
+  const isCtaErr = isErr || scr.ctaVariant === "negative";
+  const ctaBg = isCtaErr ? "#DE1135" : "#000000";
+  let ctaLabel = scr.cta || (idx < total - 1 ? "Continuar" : "Finalizar");
+  if (/simul/i.test(ctaLabel)) {
+    ctaLabel = isErr ? "Reintentar operación" : (idx < total - 1 ? "Continuar" : "Finalizar");
+  }
+  const ctaIcon = isErr ? "↺" : "➔";
+
+  const hasSecondary = Boolean(
+    scr.secondaryCta &&
+    (scr.secondaryCta.text || typeof scr.secondaryCta === "string") &&
+    !/simul/i.test(scr.secondaryCta.text || scr.secondaryCta)
+  );
+
+  const footerHeight = hasSecondary ? 134 : 92;
+  const totalFrameH = 812;
+  const footerY = totalFrameH - footerHeight;
+
+  let footerButtons = "";
+  if (hasSecondary) {
+    const secText = typeof scr.secondaryCta === "string" ? scr.secondaryCta : scr.secondaryCta.text;
+    const isTertiary = scr.secondaryCta.variant === "tertiary";
+    const secBg = isTertiary ? "#FFFFFF" : "#EEEEEE";
+    const secStroke = isTertiary ? `stroke="#E2E2E2" stroke-width="1"` : "";
+
+    footerButtons = `
+      <!-- Primary Action Button (Uber Base DS CTA) -->
+      <g id="CTA_Button" transform="translate(20, ${footerY + 12})">
+        <rect width="335" height="48" rx="8" fill="${ctaBg}"/>
+        <text x="167.5" y="30" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">${escapeXml(ctaLabel)} ${ctaIcon}</text>
+      </g>
+      <!-- Secondary Action Button -->
+      <g id="Secondary_CTA_Button" transform="translate(20, ${footerY + 68})">
+        <rect width="335" height="40" rx="8" fill="${secBg}" ${secStroke}/>
+        <text x="167.5" y="25" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="13.5" font-weight="600" fill="#000000">${escapeXml(secText)}</text>
+      </g>
+    `;
+  } else {
+    footerButtons = `
+      <!-- Primary Action Button (Uber Base DS CTA) -->
+      <g id="CTA_Button" transform="translate(20, ${footerY + 14})">
+        <rect width="335" height="48" rx="8" fill="${ctaBg}"/>
+        <text x="167.5" y="30" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">${escapeXml(ctaLabel)} ${ctaIcon}</text>
+      </g>
+    `;
+  }
+
+  const stickyFooter = `
+    <!-- Sticky Footer Container (position: sticky; bottom: 0) -->
+    <g id="Sticky_Footer_Bar">
+      <!-- White background & border-top matching .al-sticky -->
+      <rect x="0" y="${footerY}" width="375" height="${footerHeight}" fill="#FFFFFF"/>
+      <line x1="0" y1="${footerY}" x2="375" y2="${footerY}" stroke="#E2E2E2" stroke-width="1"/>
+      ${footerButtons}
+      <!-- iOS Home Indicator bar -->
+      <rect x="120" y="${totalFrameH - 14}" width="135" height="5" rx="2.5" fill="#000000"/>
+    </g>
+  `;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 375 ${totalFrameH}" width="375" height="${totalFrameH}">
+    <!-- Frame Background with Phone Bezel -->
+    <rect width="375" height="${totalFrameH}" rx="36" fill="#FFFFFF" stroke="#000000" stroke-width="3"/>
+    
+    <!-- iOS Status Bar -->
+    <text x="32" y="32" font-family="Inter, -apple-system, sans-serif" font-size="13" font-weight="700" fill="#000000">9:41</text>
+    <text x="343" y="32" text-anchor="end" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="700" fill="#000000">●●● 5G</text>
+
+    <!-- Header: Back Button & Uber Logo & Step Counter -->
+    ${idx > 0 ? `
+      <text x="24" y="66" font-family="Inter, -apple-system, sans-serif" font-size="20" font-weight="700" fill="#000000">‹</text>
+      <text x="44" y="66" font-family="Inter, -apple-system, sans-serif" font-size="20" font-weight="900" fill="#000000">Uber</text>
+    ` : `
+      <text x="24" y="66" font-family="Inter, -apple-system, sans-serif" font-size="20" font-weight="900" fill="#000000">Uber</text>
+    `}
+    <text x="351" y="66" text-anchor="end" font-family="Inter, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#545454">${escapeXml(scr.navTitle || ("Paso " + (idx + 1)))}</text>
+
+    <!-- Step Progress Dots (Official Uber Base mobile) -->
+    <g id="Step_Dots" transform="translate(24, 76)">
+      ${Array.from({ length: total }).map((_, i) => {
+        const dotW = Math.round((327 - (total - 1) * 6) / total);
+        const dotX = i * (dotW + 6);
+        const dotCol = i <= idx ? "#000000" : "#E2E2E2";
+        return `<rect x="${dotX}" y="0" width="${dotW}" height="3" rx="1.5" fill="${dotCol}"/>`;
+      }).join("")}
+    </g>
+
+    <!-- Dynamic Content Body -->
+    ${elements.join("\n")}
+
+    <!-- Sticky Footer Bar at Bottom -->
+    ${stickyFooter}
+  </svg>`;
+}
+
 async function renderFlowMap(screens, screenSvgs, ticketKey, changelogData) {
   await loadFonts();
   await initStyleManager();
 
   if (!screenSvgs || screenSvgs.length === 0) {
-    figma.notify("⚠️ No hay pantallas para pintar aún. Lanza el agente en la web.");
-    return;
+    if (Array.isArray(screens) && screens.length > 0) {
+      screenSvgs = screens.map((scr, idx) => ({
+        step: scr.step || (idx + 1),
+        name: scr.shortName || scr.mainTitle || `Pantalla ${idx + 1}`,
+        svg: renderScreenSvg(scr, idx, screens.length)
+      }));
+    } else {
+      figma.notify("⚠️ No hay pantallas para pintar aún. Lanza el agente en la web.");
+      return;
+    }
   }
 
   // 1. Obtener registro de componentes de la librería (nodo 10:4737 o catálogo)
@@ -1416,11 +1680,16 @@ async function renderFlowMap(screens, screenSvgs, ticketKey, changelogData) {
     : (sameTicketSections.length + 1);
   const sectionName = "🗺️ " + ticketKey + " (Propuesta v" + versionNum + ") · Mapa de Flujo";
 
-  // Calcular posición: 200px debajo de la sección más baja que exista en el canvas
+  // Reutilizar coordenadas si ya existe una sección con el mismo nombre para evitar duplicar en canvas
+  const existingSameSection = figma.currentPage.findOne(n => n.type === "SECTION" && n.name === sectionName);
   let startX = Math.round(figma.viewport.center.x - (sectionW / 2));
   let startY = Math.round(figma.viewport.center.y - (sectionH / 2));
 
-  if (allSections.length > 0) {
+  if (existingSameSection) {
+    startX = existingSameSection.x;
+    startY = existingSameSection.y;
+    existingSameSection.remove();
+  } else if (allSections.length > 0) {
     let maxBottom = -Infinity;
     let refX = null;
     for (const s of allSections) {
@@ -1499,71 +1768,66 @@ async function renderFlowMap(screens, screenSvgs, ticketKey, changelogData) {
     const screenX = screensStartX + idx * (frameW + spacing);
     const screenY = topPad;
 
-    screenPositions.push({
-      left: screenX,
-      right: screenX + frameW,
-      top: screenY,
-      bottom: screenY + frameH,
-      width: frameW,
-      height: frameH
-    });
-
     try {
       // 3. Anotación Oficial para documentar cada pantalla del diseño (Nodo 103:525)
       await renderOfficialAnnotation(scrData, idx + 1, total, frameW, section, screenX, screenY);
 
-      // B. Importar pantalla exacta desde el SVG vectorial de alta fidelidad generado por el agente (SIN AUTOLAYOUT)
-      const rawSvg = typeof scrSvg === "string" ? scrSvg : (scrSvg && scrSvg.svg ? scrSvg.svg : "");
+      // B. Importar pantalla exacta desde el SVG vectorial de alta fidelidad generado por el agente
+      const rawSvg = typeof scrSvg === "string" ? scrSvg : (scrSvg && scrSvg.svg ? scrSvg.svg : renderScreenSvg(scrData, idx, total));
       if (!rawSvg) {
         console.warn("SVG no disponible para pantalla", idx);
+        screenPositions.push({
+          left: screenX,
+          right: screenX + frameW,
+          top: screenY,
+          bottom: screenY + frameH,
+          width: frameW,
+          height: frameH
+        });
         continue;
       }
       const node = figma.createNodeFromSvg(rawSvg);
       node.name = (scrData.step || (idx + 1)) + ". " + (scrData.shortName || scrData.mainTitle || ("Pantalla " + (idx + 1)));
 
-      // Vincular estilos locales a todos los textos y formas del SVG importado
-      bindLocalStylesToScreenNode(node);
-
-      // 2. Vincular componente real de botón Base DS si existe en catálogo
-      const ctaNode = node.findOne(n => n.name === "CTA_Button" || n.name.includes("CTA"));
-      let targetBtnComp = null;
-      if (scrData.ctaVariant === "negative") {
-        targetBtnComp = getComp("Button / Kind / Negative");
-      } else if (scrData.ctaVariant === "secondary") {
-        targetBtnComp = getComp("Button / Kind / Secondary");
-      }
-      if (!targetBtnComp) {
-        targetBtnComp = getComp("Button / Kind / Primary") || getComp("Button / Shape / Pill");
-      }
-
-      if (ctaNode && targetBtnComp) {
-        try {
-          const btnInst = targetBtnComp.createInstance();
-          btnInst.name = "CTA Button · Base DS Instance";
-          btnInst.resize(335, 48);
-          btnInst.cornerRadius = 8;
-          btnInst.x = 20;
-          btnInst.y = 732;
-
-          const tChild = btnInst.findOne(n => n.type === "TEXT");
-          if (tChild && scrData.cta) {
-            await figma.loadFontAsync(tChild.fontName);
-            tChild.characters = scrData.cta + " ➔";
-            tChild.fontSize = 15;
-          }
-
-          node.appendChild(btnInst);
-          ctaNode.remove();
-        } catch(btnErr) {
-          console.warn("No se pudo reemplazar instancia de botón:", btnErr);
-        }
-      }
-
+      // Preservar la fidelidad absoluta del diseño del agente (375px x 812px)
       section.appendChild(node);
       node.x = screenX;
       node.y = screenY;
+      node.cornerRadius = 36;
+      node.clipsContent = true;
+
+      // Asegurar tamaño estándar móvil 375px x 812px
+      if (typeof node.resize === "function") {
+        node.resize(375, 812);
+      }
+
+      // Fijar Constraints a BOTTOM en Figma para la barra Sticky inferior
+      try {
+        const stickyBar = node.findOne(n => n.name === "Sticky_Footer_Bar" || n.name === "CTA_Button");
+        if (stickyBar && "constraints" in stickyBar) {
+          stickyBar.constraints = { horizontal: "STRETCH", vertical: "MAX" };
+        }
+      } catch (e) {}
+
+      const actualH = (node && node.height) ? Math.round(node.height) : frameH;
+      screenPositions.push({
+        left: screenX,
+        right: screenX + frameW,
+        top: screenY,
+        bottom: screenY + actualH,
+        width: frameW,
+        height: actualH
+      });
     } catch (err) {
       console.error("Error importando pantalla SVG en Figma:", err);
+      screenPositions.push({
+        left: screenX,
+        right: screenX + frameW,
+        top: screenY,
+        bottom: screenY + frameH,
+        width: frameW,
+        height: frameH
+      });
     }
   }
 
@@ -1585,17 +1849,20 @@ async function renderFlowMap(screens, screenSvgs, ticketKey, changelogData) {
     if (tPos && sPos) {
       let pathD = "";
       let midX = 0, midY = 0;
+      let arrowSvg = "";
 
       if (targetIdx === idx + 1) {
         // Conexión consecutiva hacia adelante: Salida CTA (derecha) → Entrada (izquierda)
+        const hasSec = Boolean(s.secondaryCta && (s.secondaryCta.text || typeof s.secondaryCta === "string"));
         const startX = sPos.right;
-        const startY = sPos.top + 756;
+        const startY = sPos.top + Math.round(sPos.height - (hasSec ? 100 : 54));
         const endX = tPos.left;
         const endY = tPos.top + 80;
         midX = Math.round(startX + (endX - startX) * 0.5);
         midY = Math.round((startY + endY) * 0.5);
 
         pathD = `M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}`;
+        arrowSvg = `<polygon points="${endX},${endY} ${endX - 10},${endY - 6} ${endX - 7},${endY} ${endX - 10},${endY + 6}" fill="${strokeColor}"/>`;
       } else if (targetIdx < idx) {
         // Conexión de retorno / loop hacia atrás: Salida inferior → Trazado bajo pantallas → Entrada inferior
         loopTrackIndex++;
@@ -1608,6 +1875,7 @@ async function renderFlowMap(screens, screenSvgs, ticketKey, changelogData) {
         midY = loopY;
 
         pathD = `M ${startX} ${startY} L ${startX} ${loopY} L ${endX} ${loopY} L ${endX} ${endY}`;
+        arrowSvg = `<polygon points="${endX},${endY} ${endX - 6},${endY + 10} ${endX},${endY + 7} ${endX + 6},${endY + 10}" fill="${strokeColor}"/>`;
       } else {
         // Salto hacia adelante por arriba
         const startX = Math.round(sPos.left + sPos.width * 0.5);
@@ -1619,6 +1887,7 @@ async function renderFlowMap(screens, screenSvgs, ticketKey, changelogData) {
         midY = archY;
 
         pathD = `M ${startX} ${startY} L ${startX} ${archY} L ${endX} ${archY} L ${endX} ${endY}`;
+        arrowSvg = `<polygon points="${endX},${endY} ${endX - 6},${endY - 10} ${endX},${endY - 7} ${endX + 6},${endY - 10}" fill="${strokeColor}"/>`;
       }
 
       const fullCta = (s.cta || (idx < total - 1 ? "Continuar" : "Reiniciar")).trim();
@@ -1627,12 +1896,8 @@ async function renderFlowMap(screens, screenSvgs, ticketKey, changelogData) {
 
       const connSvg = `
         <svg xmlns="http://www.w3.org/2000/svg" width="${sectionW}" height="${sectionH}" viewBox="0 0 ${sectionW} ${sectionH}">
-          <defs>
-            <marker id="arr-${idx}" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M 0 1 L 8 5 L 0 9 z" fill="${strokeColor}"/>
-            </marker>
-          </defs>
-          <path d="${pathD}" stroke="${strokeColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" marker-end="url(#arr-${idx})" ${isDashed}/>
+          <path d="${pathD}" stroke="${strokeColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" ${isDashed}/>
+          ${arrowSvg}
           <g transform="translate(${midX}, ${midY})">
             <rect x="-${textWidth * 0.5}" y="-14" width="${textWidth}" height="28" rx="8" fill="#FFFFFF" stroke="${strokeColor}" stroke-width="1.5"/>
             <text x="0" y="4.5" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="700" fill="${strokeColor}">${escapeXml(labelText)}</text>
@@ -1665,18 +1930,15 @@ async function renderFlowMap(screens, screenSvgs, ticketKey, changelogData) {
         const sMidX = Math.round((sX + eX) * 0.5);
 
         const secPathD = `M ${sX} ${sY} L ${sX} ${loopY2} L ${eX} ${loopY2} L ${eX} ${eY}`;
+        const secArrowSvg = `<polygon points="${eX},${eY} ${eX - 6},${eY + 10} ${eX},${eY + 7} ${eX + 6},${eY + 10}" fill="#545454"/>`;
         const fullSecCta = (s.secondaryCta.text || "Volver").trim();
         const secLabel = `↩️ ${fullSecCta} ➔ Paso ${secTarget}`;
         const secTextWidth = Math.max(110, Math.round(secLabel.length * 7.5 + 28));
 
         const secSvg = `
           <svg xmlns="http://www.w3.org/2000/svg" width="${sectionW}" height="${sectionH}" viewBox="0 0 ${sectionW} ${sectionH}">
-            <defs>
-              <marker id="arr-sec-${idx}" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 1 L 8 5 L 0 9 z" fill="#545454"/>
-              </marker>
-            </defs>
-            <path d="${secPathD}" stroke="#545454" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4" fill="none" marker-end="url(#arr-sec-${idx})"/>
+            <path d="${secPathD}" stroke="#545454" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4" fill="none"/>
+            ${secArrowSvg}
             <g transform="translate(${sMidX}, ${loopY2})">
               <rect x="-${secTextWidth * 0.5}" y="-14" width="${secTextWidth}" height="28" rx="8" fill="#FFFFFF" stroke="#545454" stroke-width="1.5"/>
               <text x="0" y="4.5" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="10.5" font-weight="700" fill="#333333">${escapeXml(secLabel)}</text>
@@ -1915,8 +2177,14 @@ async function renderFlowMap(screens, screenSvgs, ticketKey, changelogData) {
   docFrame.x = screensStartX + total * (frameW + spacing);
   docFrame.y = 120;
 
-  // Ajustar altura total de la sección para dar cabida a la documentación completa sin cortes
-  const calculatedHeight = topPad + Math.max(frameH, docFrame.height) + bottomPad;
+  // Ajustar altura total de la sección para dar cabida a pantallas, conectores inferiores y documentación sin cortes
+  let maxElementBottom = docFrame.y + docFrame.height;
+  for (const pos of screenPositions) {
+    if (pos.bottom > maxElementBottom) maxElementBottom = pos.bottom;
+  }
+  const maxBottomWithConnectors = maxElementBottom + 40 + (loopTrackIndex * 30) + bottomPad;
+  const calculatedHeight = Math.max(sectionH, maxBottomWithConnectors);
+
   if (typeof section.resizeWithoutConstraints === "function") {
     section.resizeWithoutConstraints(sectionW, calculatedHeight);
   } else if (typeof section.resize === "function") {
@@ -2148,7 +2416,7 @@ async function renderOrchestrationFlow() {
     };
   }
 
-  const sectionName = "🤖 Flujo de Orquestación · Albora Design Agents";
+  const sectionName = "🤖 Flujo de Orquestación · Uber Base Design Agents";
   const old = figma.currentPage.findOne((n) => n.name === sectionName);
   if (old) old.remove();
 
@@ -2352,7 +2620,7 @@ async function renderOrchestrationFlow() {
     badgeBg: "#EFF6FF",
     badgeColor: "#1E40AF",
     width: aW,
-    subtitle: "Alineación con Albora DS",
+    subtitle: "Alineación con Uber Base DS",
     borderColor: "#BFDBFE",
     items: [
       { text: "Entrada: Brief + components/README.md", icon: "📥", bold: true },
@@ -2429,7 +2697,7 @@ async function renderOrchestrationFlow() {
     subtitle: "Auditoría de accesibilidad y diseño",
     borderColor: "#A7F3D0",
     items: [
-      { text: "Entrada: Pantallas UI + Reglas Albora", icon: "📥", bold: true },
+      { text: "Entrada: Pantallas UI + Reglas Uber Base DS", icon: "📥", bold: true },
       { text: "Valida WCAG 2.1 AA y áreas táctiles", icon: "♿" },
       { text: "Salida JSON: checks, fixes, files", icon: "📤" },
       { text: "Aplica correcciones automáticas de código", icon: "🛠️", bold: true },

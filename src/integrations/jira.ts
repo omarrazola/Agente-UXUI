@@ -1,35 +1,47 @@
 import { config } from "../config.js";
 import { log } from "../lib/logger.js";
 
-function authHeader(): string {
-  return "Basic " + Buffer.from(`${config.jira.email}:${config.jira.apiToken}`).toString("base64");
+export interface JiraConfigOverride {
+  baseUrl?: string;
+  email?: string;
+  apiToken?: string;
+  projectKey?: string;
 }
 
-async function jiraFetch(pathname: string, init: RequestInit): Promise<void> {
-  if (!config.jira.baseUrl || !config.jira.email || !config.jira.apiToken) {
-    throw new Error("Faltan JIRA_BASE_URL, JIRA_EMAIL o JIRA_API_TOKEN en .env");
+function authHeader(override?: JiraConfigOverride): string {
+  const email = override?.email || config.jira.email;
+  const token = override?.apiToken || config.jira.apiToken;
+  return "Basic " + Buffer.from(`${email}:${token}`).toString("base64");
+}
+
+async function jiraFetch(pathname: string, init: RequestInit, override?: JiraConfigOverride): Promise<void> {
+  const baseUrl = (override?.baseUrl || config.jira.baseUrl)?.replace(/\/$/, "");
+  const email = override?.email || config.jira.email;
+  const token = override?.apiToken || config.jira.apiToken;
+  if (!baseUrl || !email || !token) {
+    throw new Error("Faltan credenciales de Jira: Dominio URL, Email o API Token. Configúralos en el panel superior de API Keys.");
   }
-  const res = await fetch(`${config.jira.baseUrl}${pathname}`, {
+  const res = await fetch(`${baseUrl}${pathname}`, {
     ...init,
-    headers: { Authorization: authHeader(), Accept: "application/json", "Content-Type": "application/json", ...init.headers },
+    headers: { Authorization: authHeader(override), Accept: "application/json", "Content-Type": "application/json", ...init.headers },
   });
   if (!res.ok) throw new Error(`Jira respondió ${res.status}: ${await res.text()}`);
 }
 
 /** Comentario en texto plano (API v2, que acepta texto sin formato ADF). */
-export async function addJiraComment(issueKey: string, body: string): Promise<void> {
+export async function addJiraComment(issueKey: string, body: string, override?: JiraConfigOverride): Promise<void> {
   await jiraFetch(`/rest/api/2/issue/${encodeURIComponent(issueKey)}/comment`, {
     method: "POST",
     body: JSON.stringify({ body }),
-  });
+  }, override);
 }
 
-export async function transitionJiraIssue(issueKey: string, transitionId: string): Promise<void> {
+export async function transitionJiraIssue(issueKey: string, transitionId: string, override?: JiraConfigOverride): Promise<void> {
   if (!transitionId) return;
   await jiraFetch(`/rest/api/3/issue/${encodeURIComponent(issueKey)}/transitions`, {
     method: "POST",
     body: JSON.stringify({ transition: { id: transitionId } }),
-  });
+  }, override);
 }
 
 export interface CreateJiraIssueParams {
@@ -84,7 +96,7 @@ function parseJiraErrorMessage(status: number, rawText: string, projectKey: stri
 /**
  * Crea una incidencia o brief de diseño en Jira de manera automática.
  */
-export async function createJiraIssue(params: CreateJiraIssueParams): Promise<JiraCreatedIssue> {
+export async function createJiraIssue(params: CreateJiraIssueParams, override?: JiraConfigOverride): Promise<JiraCreatedIssue> {
   if (config.dryRun) {
     const mockKey = `KAN-${Math.floor(100 + Math.random() * 900)}`;
     log.info(`[DRY_RUN] Simulando creación de ticket en Jira: ${mockKey} - "${params.summary}"`);
@@ -96,11 +108,14 @@ export async function createJiraIssue(params: CreateJiraIssueParams): Promise<Ji
     };
   }
 
-  if (!config.jira.baseUrl || !config.jira.email || !config.jira.apiToken) {
-    throw new Error("Faltan JIRA_BASE_URL, JIRA_EMAIL o JIRA_API_TOKEN en la configuración (.env)");
-  }
+  const baseUrl = (override?.baseUrl || config.jira.baseUrl)?.replace(/\/$/, "");
+  const email = override?.email || config.jira.email;
+  const apiToken = override?.apiToken || config.jira.apiToken;
+  const projectKey = override?.projectKey || params.projectKey || config.jira.projectKey || "KAN";
 
-  const projectKey = params.projectKey || config.jira.projectKey || "KAN";
+  if (!baseUrl || !email || !apiToken) {
+    throw new Error("Faltan credenciales de Jira: Dominio URL, Email o API Token. Configúralos en el panel superior de API Keys.");
+  }
   const triggerLabel = config.jira.triggerLabel || "diseño";
   const rawLabels = [triggerLabel, "uber-base", ...(params.labels || [])];
   // Normalizar etiquetas (en Jira las etiquetas no pueden tener espacios)
@@ -127,10 +142,10 @@ export async function createJiraIssue(params: CreateJiraIssueParams): Promise<Ji
     fields.priority = { name: jiraPrio };
   }
 
-  let res = await fetch(`${config.jira.baseUrl}/rest/api/2/issue`, {
+  let res = await fetch(`${baseUrl}/rest/api/2/issue`, {
     method: "POST",
     headers: {
-      Authorization: authHeader(),
+      Authorization: authHeader(override),
       Accept: "application/json",
       "Content-Type": "application/json",
     },
@@ -143,10 +158,10 @@ export async function createJiraIssue(params: CreateJiraIssueParams): Promise<Ji
     if (errText.includes("issuetype")) {
       log.warn(`[JIRA] Falló el tipo 'Tarea', reintentando con ID '10003'...`);
       fields.issuetype = { id: "10003" };
-      res = await fetch(`${config.jira.baseUrl}/rest/api/2/issue`, {
+      res = await fetch(`${baseUrl}/rest/api/2/issue`, {
         method: "POST",
         headers: {
-          Authorization: authHeader(),
+          Authorization: authHeader(override),
           Accept: "application/json",
           "Content-Type": "application/json",
         },
@@ -162,7 +177,7 @@ export async function createJiraIssue(params: CreateJiraIssueParams): Promise<Ji
   }
 
   const data = (await res.json()) as { id: string; key: string; self: string };
-  const issueUrl = `${config.jira.baseUrl}/browse/${data.key}`;
+  const issueUrl = `${baseUrl}/browse/${data.key}`;
   log.info(`[JIRA] Ticket creado automáticamente con éxito: ${data.key} (${issueUrl})`);
 
   return {

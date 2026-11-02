@@ -12,7 +12,7 @@ export interface RunAgentOptions {
 
 /**
  * Ejecuta un agente: compone su prompt con el material común, el ticket,
- * las salidas anteriores que necesita y las referencias de Albora DS, y devuelve su JSON.
+ * las salidas anteriores que necesita y las referencias de Uber Base DS, y devuelve su JSON.
  */
 export async function runAgent(agent: AgentDef, run: RunState, opts: RunAgentOptions = {}): Promise<Record<string, unknown>> {
   const [common, own] = await Promise.all([loadPrompt("_common.md"), loadPrompt(agent.prompt)]);

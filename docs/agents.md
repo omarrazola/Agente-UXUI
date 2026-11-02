@@ -5,18 +5,18 @@ Las instrucciones de cada agente viven en `agents/prompts/` en Markdown. Se pued
 | Paso | Agente | Prompt | Recibe | Devuelve |
 |------|--------|--------|--------|----------|
 | 1 | Analista de brief | `01-brief.md` | Ticket normalizado | `objective`, `metric`, `scope`, `outOfScope`, `deadline`, `platform`, `openQuestions` |
-| 2 | Agente de contexto | `02-context.md` | Brief + catálogo de Albora DS | `findings`, `reusableComponents`, `missingComponents`, `relatedTickets` |
+| 2 | Agente de contexto | `02-context.md` | Brief + catálogo de Uber Base DS | `findings`, `reusableComponents`, `missingComponents`, `relatedTickets` |
 | 3 | Arquitecto UX | `03-ux.md` | Brief + contexto | `flow`, `screens`, `userStories`, `acceptanceCriteria` |
 | 4 | Redactor UX | `04-copy.md` | Flujo + guía de tono | `strings` por pantalla |
-| 5 | Agente de UI | `05-ui.md` | Flujo + textos + Albora DS | `files` con el HTML de cada pantalla |
-| 6 | Revisor QA | `06-qa.md` | Pantallas + reglas de Albora DS | `checks`, `fixes`, `files` corregidos |
+| 5 | Agente de UI | `05-ui.md` | Flujo + textos + Uber Base DS | `files` con el HTML de cada pantalla |
+| 6 | Revisor QA | `06-qa.md` | Pantallas + reglas de Uber Base DS | `checks`, `fixes`, `files` corregidos |
 | 7 | Agente de entrega | `07-delivery.md` | Todo lo anterior | `summary`, `comment` para el ticket |
 
 ## Reglas comunes
 
-- Escriben en español y con el tono de Albora.
+- Escriben en español y con el tono de voz oficial de Uber.
 - No inventan datos de negocio: si falta algo, lo convierten en pregunta abierta.
-- El agente de UI y el de QA solo pueden usar las clases y variables de `design-system/css/albora.css`.
+- El agente de UI y el de QA solo pueden usar las clases y variables de `design-system/css/base.css` y `design-system/tokens/base.tokens.json`.
 - Ningún agente aprueba, despliega ni cierra tickets.
 
 ## Organigrama Visual en la Herramienta

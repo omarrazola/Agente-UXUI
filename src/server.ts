@@ -1,5 +1,11 @@
+import http from "node:http";
+import os from "node:os";
 import path from "node:path";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import express, { type Request } from "express";
+import { WebSocketServer, WebSocket } from "ws";
+
 import { config, ROOT } from "./config.js";
 import { log } from "./lib/logger.js";
 import { complete } from "./lib/claude.js";
@@ -8,15 +14,31 @@ import { approve, iterate, startRun } from "./pipeline/orchestrator.js";
 import { loadRun } from "./pipeline/store.js";
 import { jiraWebhook } from "./webhooks/jira.js";
 import { trelloWebhook } from "./webhooks/trello.js";
-import { startJiraPoller } from "./integrations/jiraPoller.js";
-
-import http from "node:http";
-import { WebSocketServer, WebSocket } from "ws";
+import {
+  escapeXml,
+  getFigmaTarget,
+  getLatestFigmaDesign,
+  setFigmaTarget,
+  setLatestFigmaDesign,
+} from "./integrations/figma.js";
+import { createJiraIssue } from "./integrations/jira.js";
+import { executeHandoffApprove } from "./integrations/handoff.js";
+import {
+  fetchJiraKanIssues,
+  markIssueHandled,
+  startJiraPoller,
+  toTicket,
+} from "./integrations/jiraPoller.js";
+import {
+  extractCredentials,
+  testGemini,
+  testAnthropic,
+  testJira,
+  testFigma,
+  testTrello,
+} from "./lib/userConfig.js";
 
 const app = express();
-import fs from "node:fs";
-
-
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
@@ -25,13 +47,30 @@ const connectedClients = new Set<WebSocket>();
 wss.on("connection", (ws) => {
   connectedClients.add(ws);
   log.info(`[FIGMA-WS] Cliente Figma conectado (Total: ${connectedClients.size})`);
+
+  // Sincronizar inmediatamente el último diseño al plugin recién conectado
+  try {
+    const latest = getLatestFigmaDesign();
+    if (latest && Array.isArray(latest.screens) && latest.screens.length > 0) {
+      ws.send(JSON.stringify({
+        type: "RENDER_FLOW_MAP",
+        key: latest.key,
+        screens: latest.screens,
+        screenSvgs: latest.screenSvgs,
+        changelog: latest.changelog,
+      }));
+    }
+  } catch (err) {
+    log.warn("[FIGMA-WS] Error enviando diseño inicial al conectar:", err);
+  }
+
   ws.on("close", () => {
     connectedClients.delete(ws);
     log.info(`[FIGMA-WS] Cliente Figma desconectado (Total: ${connectedClients.size})`);
   });
 });
 
-export function broadcastToFigma(payload: any) {
+export function broadcastToFigma(payload: Record<string, unknown>) {
   const msg = JSON.stringify(payload);
   let sent = 0;
   for (const client of connectedClients) {
@@ -44,28 +83,13 @@ export function broadcastToFigma(payload: any) {
   return sent;
 }
 
+// Configuración CORS global
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Figma-Token");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
-});
-
-app.get("/api/figma/console-script", async (req, res) => {
-  try {
-    const { getLatestFigmaDesign } = await import("./integrations/figma.js");
-    const latest = getLatestFigmaDesign();
-    const baseCode = fs.readFileSync("scripts/figma-console-full.js", "utf8");
-    const callReplace = "await renderFlowMap([], [], 'KAN-1');";
-    const newCall = "await renderFlowMap(" + JSON.stringify(latest.screens) + ", " + JSON.stringify(latest.screenSvgs) + ", " + JSON.stringify(latest.key || 'KAN-1') + ", " + JSON.stringify(latest.changelog || null) + ");";
-    const fullScript = baseCode.replace(callReplace, newCall);
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
-    res.send(fullScript);
-  } catch(e) {
-    res.status(500).send("console.error('Error:', " + JSON.stringify(String(e)) + ");");
-  }
 });
 
 // Guardamos el cuerpo original para verificar la firma de Trello
@@ -78,6 +102,7 @@ app.use(
   }),
 );
 
+// Healthcheck
 app.get("/health", (_req, res) => {
   res.json({ ok: true, dryRun: config.dryRun });
 });
@@ -90,37 +115,109 @@ app.head("/webhooks/trello", (_req, res) => {
 });
 app.post("/webhooks/trello", trelloWebhook);
 
-// --- Consola de Agentes y Previsualizaciones ---
+// --- Archivos Estáticos y Previsualizaciones ---
 app.use("/previews", express.static(path.join(config.paths.output, "previews")));
-app.use(express.static(path.join(process.cwd(), "public")));
-app.use(express.static(path.join(process.cwd(), "demo")));
 app.use(express.static(path.join(ROOT, "public")));
-app.use(express.static(path.join(ROOT, "demo")));
-app.use("/app", express.static(path.join(process.cwd(), "demo")));
-app.use("/demo", express.static(path.join(process.cwd(), "demo")));
+app.use("/demo", express.static(path.join(ROOT, "demo")));
+app.use("/app", express.static(path.join(ROOT, "public")));
 
 app.get(["/", "/demo", "/app"], (_req, res) => {
-  const candidates = [
-    path.join(process.cwd(), "public", "index.html"),
-    path.join(process.cwd(), "demo", "index.html"),
-    path.join(ROOT, "public", "index.html"),
-    path.join(ROOT, "demo", "index.html"),
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(c)) {
-      return res.sendFile(c);
-    }
+  const publicIndex = path.join(ROOT, "public", "index.html");
+  const demoIndex = path.join(ROOT, "demo", "index.html");
+
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+
+  if (existsSync(publicIndex)) {
+    return res.sendFile(publicIndex);
+  }
+  if (existsSync(demoIndex)) {
+    return res.sendFile(demoIndex);
   }
   res.status(404).send("index.html no encontrado");
 });
 
-// --- API interna (para un panel propio o pruebas) ---
+// --- Scripts de Figma generados dinámicamente ---
+app.get("/api/figma/console-script", async (_req, res) => {
+  try {
+    const latest = getLatestFigmaDesign();
+    const scriptPath = path.join(ROOT, "scripts", "figma-console-full.js");
+    const baseCode = await readFile(scriptPath, "utf8");
+    const callReplace = "await renderFlowMap([], [], 'KAN-1');";
+    const newCall = `await renderFlowMap(${JSON.stringify(latest.screens)}, ${JSON.stringify(latest.screenSvgs)}, ${JSON.stringify(latest.key || "KAN-1")}, ${JSON.stringify(latest.changelog || null)});`;
+    const fullScript = baseCode.replace(callReplace, newCall);
+
+    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    res.send(fullScript);
+  } catch (e) {
+    res.status(500).send(`console.error('Error:', ${JSON.stringify(String(e))});`);
+  }
+});
+
+app.get("/api/figma/orchestration-script", async (_req, res) => {
+  try {
+    const scriptPath = path.join(ROOT, "scripts", "render-orchestration-figma.js");
+    const script = await readFile(scriptPath, "utf8");
+    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    res.send(script);
+  } catch (e) {
+    res.status(500).send(`console.error('Error:', ${JSON.stringify(String(e))});`);
+  }
+});
+
+// --- BYOK: Endpoints de configuración e inspección de credenciales del usuario ---
+app.get("/api/config/status", (_req, res) => {
+  res.json({
+    ok: true,
+    serverConfig: {
+      hasGemini: Boolean(config.geminiApiKey),
+      hasAnthropic: Boolean(config.anthropicApiKey),
+      hasJira: Boolean(config.jira.baseUrl && config.jira.email && config.jira.apiToken),
+      hasTrello: Boolean(config.trello.apiKey && config.trello.token),
+      hasFigma: Boolean(config.figma.accessToken),
+      activeProvider: config.provider,
+      dryRun: config.dryRun,
+    },
+  });
+});
+
+app.post("/api/config/test", async (req, res) => {
+  try {
+    const { service, apiKey, model, baseUrl, email, apiToken, token } = req.body ?? {};
+    if (service === "gemini") {
+      const result = await testGemini(apiKey, model);
+      return res.json(result);
+    }
+    if (service === "anthropic") {
+      const result = await testAnthropic(apiKey, model);
+      return res.json(result);
+    }
+    if (service === "jira") {
+      const result = await testJira(baseUrl, email, apiToken || apiKey);
+      return res.json(result);
+    }
+    if (service === "figma") {
+      const result = await testFigma(token || apiKey);
+      return res.json(result);
+    }
+    if (service === "trello") {
+      const result = await testTrello(apiKey, token);
+      return res.json(result);
+    }
+    res.status(400).json({ ok: false, message: "Servicio no soportado: " + service });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, message: err?.message || String(err) });
+  }
+});
+
+// --- API interna (panel web y pruebas) ---
 app.post("/api/runs", async (req, res) => {
   try {
-    const title = String(req.body?.title ?? "PeticiÃ³n de diseÃ±o").trim();
+    const title = String(req.body?.title ?? "Petición de diseño").trim();
     const description = String(req.body?.description ?? "").trim();
     if (!description) {
-      res.status(400).json({ error: "Falta 'description' con la peticiÃ³n de diseÃ±o" });
+      res.status(400).json({ error: "Falta 'description' con la petición de diseño" });
       return;
     }
     const key = req.body?.key ? String(req.body.key).trim() : `WEB-${Date.now().toString(36).toUpperCase()}`;
@@ -130,12 +227,12 @@ app.post("/api/runs", async (req, res) => {
       externalId: key,
       title,
       description,
-      labels: Array.isArray(req.body?.labels) ? req.body.labels : ["diseÃ±o", "uber-base"],
-      reporter: String(req.body?.reporter ?? "DiseÃ±adora UI/UX"),
+      labels: Array.isArray(req.body?.labels) ? req.body.labels : ["diseño", "uber-base"],
+      reporter: String(req.body?.reporter ?? "Diseñadora UI/UX"),
       attachments: [],
     };
     res.status(202).json({ ok: true, key, message: "Pipeline iniciado" });
-    startRun(ticket).catch((err) => log.error("Pipeline fallÃ³", err));
+    startRun(ticket).catch((err) => log.error("Pipeline falló", err));
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
@@ -150,15 +247,15 @@ app.post("/api/jira/create", async (req, res) => {
       res.status(400).json({ ok: false, error: "El título del brief es obligatorio" });
       return;
     }
-    const { createJiraIssue } = await import("./integrations/jira.js");
+
+    const creds = extractCredentials(req);
     const created = await createJiraIssue({
       summary: ticketSummary,
       description: ticketDesc,
-      projectKey: projectKey ? String(projectKey).trim() : undefined,
+      projectKey: projectKey ? String(projectKey).trim() : creds.jira?.projectKey,
       priority: priority ? String(priority).trim() : undefined,
       labels: Array.isArray(labels) ? labels : undefined,
-    });
-    const { markIssueHandled } = await import("./integrations/jiraPoller.js");
+    }, creds.jira);
     markIssueHandled(created.key);
 
     let runStarted = false;
@@ -190,11 +287,11 @@ app.post("/api/jira/create", async (req, res) => {
   }
 });
 
-app.get("/api/jira/issues", async (_req, res) => {
+app.get("/api/jira/issues", async (req, res) => {
   try {
-    const { fetchJiraKanIssues, toTicket } = await import("./integrations/jiraPoller.js");
-    const issues = await fetchJiraKanIssues();
-    res.json({ ok: true, issues: issues.map(toTicket) });
+    const creds = extractCredentials(req);
+    const issues = await fetchJiraKanIssues(creds.jira);
+    res.json({ ok: true, issues: issues.map((iss: any) => toTicket(iss, creds.jira?.baseUrl)) });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
@@ -202,12 +299,11 @@ app.get("/api/jira/issues", async (_req, res) => {
 
 app.get("/api/figma/pending", async (_req, res) => {
   try {
-    const { getLatestFigmaDesign } = await import("./integrations/figma.js");
     const design = getLatestFigmaDesign();
     res.json({
       ok: true,
       ...design,
-      script: generateFigmaPluginScript(design.screens || [])
+      script: generateFigmaPluginScript(design.screens || []),
     });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
@@ -216,7 +312,6 @@ app.get("/api/figma/pending", async (_req, res) => {
 
 app.get("/api/figma/target", async (_req, res) => {
   try {
-    const { getFigmaTarget } = await import("./integrations/figma.js");
     res.json({ ok: true, ...getFigmaTarget() });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
@@ -230,12 +325,11 @@ app.post("/api/figma/target", async (req, res) => {
       res.status(400).json({ error: "Falta el campo 'url'" });
       return;
     }
-    const { setFigmaTarget, getFigmaTarget } = await import("./integrations/figma.js");
     setFigmaTarget(url);
     const target = getFigmaTarget();
     broadcastToFigma({
       type: "FIGMA_TARGET_UPDATED",
-      ...target
+      ...target,
     });
     log.info(`[FIGMA] Nueva URL de destino configurada: ${target.fileUrl} (${target.fileKey})`);
     res.json({ ok: true, ...target });
@@ -252,12 +346,14 @@ app.get("/api/runs/:key", async (req, res) => {
   }
   const uiScreens = (run.outputs?.ui as any)?.screens;
   if (Array.isArray(uiScreens) && uiScreens.length > 0) {
-    const { setLatestFigmaDesign } = await import("./integrations/figma.js");
     setLatestFigmaDesign(run.key, uiScreens);
+    const updated = getLatestFigmaDesign();
     broadcastToFigma({
       type: "RENDER_FLOW_MAP",
-      screens: uiScreens,
-      key: run.key
+      screens: updated.screens,
+      screenSvgs: updated.screenSvgs,
+      key: run.key,
+      changelog: updated.changelog
     });
   }
   res.json(run);
@@ -270,7 +366,7 @@ app.post("/api/runs/:key/iterate", async (req, res) => {
     return;
   }
   res.status(202).json({ ok: true });
-  iterate(req.params.key, request).catch((err) => log.error("IteraciÃ³n fallida", err));
+  iterate(req.params.key, request).catch((err) => log.error("Iteración fallida", err));
 });
 
 // Prompt maestro de los 7 agentes de Uber Base Design System
@@ -477,49 +573,33 @@ app.post("/api/llm/generate", async (req, res) => {
   try {
     const { key, title, priority, body: briefText } = req.body ?? {};
     if (!briefText && !title) {
-      res.status(400).json({ error: "Falta el tÃ­tulo o el contenido del brief" });
+      res.status(400).json({ error: "Falta el título o el contenido del brief" });
       return;
     }
 
+    const creds = extractCredentials(req);
     const userPrompt = buildUserPrompt(key, priority, title, briefText);
-    const text = await complete({ system: UBER_BASE_SYSTEM, user: userPrompt, maxTokens: 16000 });
-    let json;
-    try {
-      json = extractJson(text);
-    } catch (parseErr) {
-      log.warn("Fallo al extraer JSON directo, reparando...");
-      let repaired = text.trim();
-      const firstBrace = repaired.indexOf("{");
-      if (firstBrace !== -1) {
-        repaired = repaired.slice(firstBrace);
-        let openBraces = 0;
-        let openBrackets = 0;
-        for (let i = 0; i < repaired.length; i++) {
-          if (repaired[i] === "{") openBraces++;
-          else if (repaired[i] === "}") openBraces--;
-          else if (repaired[i] === "[") openBrackets++;
-          else if (repaired[i] === "]") openBrackets--;
-        }
-        while (openBrackets > 0) { repaired += "]"; openBrackets--; }
-        while (openBraces > 0) { repaired += "}"; openBraces--; }
-        try {
-          json = JSON.parse(repaired);
-        } catch {
-          throw parseErr;
-        }
-      } else {
-        throw parseErr;
-      }
-    }
+    const text = await complete({
+      system: UBER_BASE_SYSTEM,
+      user: userPrompt,
+      maxTokens: 16000,
+      provider: creds.llmProvider,
+      geminiApiKey: creds.geminiApiKey,
+      geminiModel: creds.geminiModel,
+      anthropicApiKey: creds.anthropicApiKey,
+      model: creds.claudeModel,
+    });
+    const json = extractJson<any>(text);
+
     if (json && Array.isArray(json.screens)) {
-      const { setLatestFigmaDesign } = await import("./integrations/figma.js");
       setLatestFigmaDesign(key || "KAN-1", json.screens);
+      const updated = getLatestFigmaDesign();
       broadcastToFigma({
         type: "RENDER_FLOW_MAP",
-        screens: json.screens,
-        screenSvgs: [],
+        screens: updated.screens,
+        screenSvgs: updated.screenSvgs,
         key: key || "KAN-1",
-        changelog: null
+        changelog: null,
       });
     }
     res.json({ ok: true, result: json });
@@ -529,58 +609,100 @@ app.post("/api/llm/generate", async (req, res) => {
   }
 });
 
-// Endpoint de streaming en tiempo real (Server-Sent Events) para visualizaciÃ³n progresiva
+// Endpoint de streaming en tiempo real (Server-Sent Events) para visualización progresiva
 app.post("/api/llm/stream", async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
-  const send = (event: string, data: any) => {
+  const send = (event: string, data: unknown) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
   try {
     const { key, title, priority, body: briefText } = req.body ?? {};
     if (!briefText && !title) {
-      send("error", { message: "Falta el tÃ­tulo o el contenido del brief" });
+      send("error", { message: "Falta el título o el contenido del brief" });
       res.end();
       return;
     }
 
-    send("agent_step", { id: "brief", name: "Analista de brief", status: "running", subagent: "Lector de Requisitos", log: "Analizando objetivos de negocio, prioridades y matriz de alcance..." });
-    send("agent_step", { id: "ctx", name: "Agente de contexto", status: "running", subagent: "Base DS Token Crawler", log: "Seleccionando tokens baseui oficiales de Uber Base (base.uber.com)..." });
-    send("agent_step", { id: "ux", name: "Arquitecto UX", status: "running", subagent: "MÃ¡quina de Estados", log: "Estructurando pantallas, caminos nominales y bifurcaciones de error sin dead-ends..." });
+    send("agent_step", {
+      id: "brief",
+      name: "Analista de brief",
+      status: "running",
+      subagent: "Lector de Requisitos",
+      log: "Analizando objetivos de negocio, prioridades y matriz de alcance...",
+    });
+    send("agent_step", {
+      id: "ctx",
+      name: "Agente de contexto",
+      status: "running",
+      subagent: "Base DS Token Crawler",
+      log: "Seleccionando tokens baseui oficiales de Uber Base (base.uber.com)...",
+    });
+    send("agent_step", {
+      id: "ux",
+      name: "Arquitecto UX",
+      status: "running",
+      subagent: "Máquina de Estados",
+      log: "Estructurando pantallas, caminos nominales y bifurcaciones de error sin dead-ends...",
+    });
 
+    const creds = extractCredentials(req);
     const userPrompt = buildUserPrompt(key, priority, title, briefText);
-    const text = await complete({ system: UBER_BASE_SYSTEM, user: userPrompt, maxTokens: 16000 });
-    let json: any;
-    try {
-      json = extractJson(text);
-    } catch (parseErr) {
-      let repaired = text.trim();
-      const firstBrace = repaired.indexOf("{");
-      if (firstBrace !== -1) {
-        repaired = repaired.slice(firstBrace);
-        let openBraces = 0, openBrackets = 0;
-        for (let i = 0; i < repaired.length; i++) {
-          if (repaired[i] === "{") openBraces++;
-          else if (repaired[i] === "}") openBraces--;
-          else if (repaired[i] === "[") openBrackets++;
-          else if (repaired[i] === "]") openBrackets--;
-        }
-        while (openBrackets > 0) { repaired += "]"; openBrackets--; }
-        while (openBraces > 0) { repaired += "}"; openBraces--; }
-        json = JSON.parse(repaired);
-      } else {
-        throw parseErr;
-      }
-    }
+    const text = await complete({
+      system: UBER_BASE_SYSTEM,
+      user: userPrompt,
+      maxTokens: 16000,
+      provider: creds.llmProvider,
+      geminiApiKey: creds.geminiApiKey,
+      geminiModel: creds.geminiModel,
+      anthropicApiKey: creds.anthropicApiKey,
+      model: creds.claudeModel,
+    });
+    const json = extractJson<any>(text);
 
-    send("agent_step", { id: "copy", name: "Redactor UX", status: "done", subagent: "Microcopys & CTAs", log: "Microcopys redactados en sentence case y voz activa de Uber Base." });
-    send("agent_step", { id: "ui", name: "Agente de UI", status: "done", subagent: "Maquetador HTML/CSS", log: "Componentes Base maquetados con tokens oficiales y mapas oscuros." });
-    send("agent_step", { id: "qa", name: "Revisor QA", status: "done", subagent: "Auditor WCAG AA", log: "Accesibilidad WCAG AA y resiliencia sin dead-ends auditadas." });
-    send("agent_step", { id: "deliver", name: "Agente de entrega", status: "done", subagent: "Figma AutoLayout Sync", log: "Paquete de entrega publicado con enlaces a Figma y ticket." });
-    if (json?.screens) { import("./integrations/figma.js").then(m => m.setLatestFigmaDesign(req.body?.key || "KAN-1", json.screens)); }
+    send("agent_step", {
+      id: "copy",
+      name: "Redactor UX",
+      status: "done",
+      subagent: "Microcopys & CTAs",
+      log: "Microcopys redactados en sentence case y voz activa de Uber Base.",
+    });
+    send("agent_step", {
+      id: "ui",
+      name: "Agente de UI",
+      status: "done",
+      subagent: "Maquetador HTML/CSS",
+      log: "Componentes Base maquetados con tokens oficiales y mapas oscuros.",
+    });
+    send("agent_step", {
+      id: "qa",
+      name: "Revisor QA",
+      status: "done",
+      subagent: "Auditor WCAG AA",
+      log: "Accesibilidad WCAG AA y resiliencia sin dead-ends auditadas.",
+    });
+    send("agent_step", {
+      id: "deliver",
+      name: "Agente de entrega",
+      status: "done",
+      subagent: "Figma AutoLayout Sync",
+      log: "Paquete de entrega publicado con enlaces a Figma y ticket.",
+    });
+
+    if (json?.screens) {
+      setLatestFigmaDesign(req.body?.key || "KAN-1", json.screens);
+      const updated = getLatestFigmaDesign();
+      broadcastToFigma({
+        type: "RENDER_FLOW_MAP",
+        key: updated.key,
+        screens: updated.screens,
+        screenSvgs: updated.screenSvgs,
+        changelog: updated.changelog,
+      });
+    }
     send("result", { ok: true, result: json });
     res.end();
   } catch (err) {
@@ -589,7 +711,7 @@ app.post("/api/llm/stream", async (req, res) => {
   }
 });
 
-// Endpoint sÃ­ncrono para que la interfaz web obtenga cambios generados por IA real inmediatamente
+// Endpoint síncrono para que la interfaz web obtenga cambios generados por IA real inmediatamente
 app.post("/api/llm/iterate", async (req, res) => {
   try {
     const { request: userReq, currentState, prompt } = req.body ?? {};
@@ -597,54 +719,46 @@ app.post("/api/llm/iterate", async (req, res) => {
       res.status(400).json({ error: "Falta 'request'" });
       return;
     }
-    const system = "Eres el equipo de agentes de diseÃ±o autÃ³nomos de Uber (Arquitecto UX, Redactor UX, Agente de UI y QA) aplicando el sistema de diseÃ±o oficial Base Design System (tokens base.uber.com). " +
-      "REGLA ESTRICTA: Las pantallas deben ser 100% finales de diseño para usuario real, SIN botones ni acciones de simulación dentro de la pantalla (PROHIBIDO 'Simular avance', 'Simular llegada', 'Simular error', etc.). Devuelve EXCLUSIVAMENTE un objeto JSON vÃ¡lido con las claves: summary, changes, agents, question, state. No incluyas explicaciones en texto fuera del JSON. " +
-      "IMPORTANTE: Si 'currentState' contiene un array 'screens', debes devolver en 'state.screens' el array completo con todas las pantallas del flujo (sin lÃ­mite artificial de pantallas, conservando todas las pantallas existentes o aÃ±adiendo/modificando las necesarias para resolver la peticiÃ³n), asegurando que cada pantalla conserve o actualice: step, shortName, stateType ('happy_path' | 'error' | 'corner_case'), stateBadge ('HAPPY PATH' | 'CASO DE ERROR' | 'CORNER CASE'), stateDesc, navTitle, mainTitle, mainSubtitle, showMap, mapMeta, heroImage, items, cards, banner, cta, ctaVariant, ctaTargetStep, secondaryCta.";
-    const user = prompt || `PeticiÃ³n de la diseÃ±adora:\n${userReq}\n\nEstado actual:\n${JSON.stringify(currentState, null, 2)}`;
-    const text = await complete({ system, user, maxTokens: 16000 });
-    let json;
-    try {
-      json = extractJson(text);
-    } catch (parseErr) {
-      log.warn("Iterate: reparando JSON devuelto por Gemini...");
-      let repaired = text.trim();
-      const first = repaired.indexOf("{");
-      if (first !== -1) {
-        repaired = repaired.slice(first);
-        let openBraces = 0, openBrackets = 0;
-        for (let i = 0; i < repaired.length; i++) {
-          if (repaired[i] === "{") openBraces++;
-          else if (repaired[i] === "}") openBraces--;
-          else if (repaired[i] === "[") openBrackets++;
-          else if (repaired[i] === "]") openBrackets--;
-        }
-        while (openBrackets > 0) { repaired += "]"; openBrackets--; }
-        while (openBraces > 0) { repaired += "}"; openBraces--; }
-        try {
-          json = JSON.parse(repaired);
-        } catch {
-          throw parseErr;
-        }
-      } else {
-        throw parseErr;
-      }
-    }
-    const iterScreens = (json?.state && Array.isArray(json.state.screens)) ? json.state.screens : (Array.isArray(json?.screens) ? json.screens : null);
+    const system =
+      "Eres el equipo de agentes de diseño autónomos de Uber (Arquitecto UX, Redactor UX, Agente de UI y QA) aplicando el sistema de diseño oficial Base Design System (tokens base.uber.com). " +
+      "REGLA ESTRICTA: Las pantallas deben ser 100% finales de diseño para usuario real, SIN botones ni acciones de simulación dentro de la pantalla (PROHIBIDO 'Simular avance', 'Simular llegada', 'Simular error', etc.). Devuelve EXCLUSIVAMENTE un objeto JSON válido con las claves: summary, changes, agents, question, state. No incluyas explicaciones en texto fuera del JSON. " +
+      "IMPORTANTE: Si 'currentState' contiene un array 'screens', debes devolver en 'state.screens' el array completo con todas las pantallas del flujo (sin límite artificial de pantallas, conservando todas las pantallas existentes o añadiendo/modificando las necesarias para resolver la petición), asegurando que cada pantalla conserve o actualice: step, shortName, stateType ('happy_path' | 'error' | 'corner_case'), stateBadge ('HAPPY PATH' | 'CASO DE ERROR' | 'CORNER CASE'), stateDesc, navTitle, mainTitle, mainSubtitle, showMap, mapMeta, heroImage, items, cards, banner, cta, ctaVariant, ctaTargetStep, secondaryCta.";
+    const user = prompt || `Petición de la diseñadora:\n${userReq}\n\nEstado actual:\n${JSON.stringify(currentState, null, 2)}`;
+    const creds = extractCredentials(req);
+    const text = await complete({
+      system,
+      user,
+      maxTokens: 16000,
+      provider: creds.llmProvider,
+      geminiApiKey: creds.geminiApiKey,
+      geminiModel: creds.geminiModel,
+      anthropicApiKey: creds.anthropicApiKey,
+      model: creds.claudeModel,
+    });
+    const json = extractJson<any>(text);
+
+    const iterScreens =
+      json?.state && Array.isArray(json.state.screens)
+        ? json.state.screens
+        : Array.isArray(json?.screens)
+          ? json.screens
+          : null;
+
     if (iterScreens) {
-      const { setLatestFigmaDesign } = await import("./integrations/figma.js");
       const changelogInfo = {
         version: (currentState?.version || 1) + 1,
         request: userReq,
         summary: json.summary || "Cambios aplicados según feedback de stakeholders",
-        changes: Array.isArray(json.changes) ? json.changes : []
+        changes: Array.isArray(json.changes) ? json.changes : [],
       };
       setLatestFigmaDesign(currentState?.key || "KAN-1", iterScreens, changelogInfo);
+      const updated = getLatestFigmaDesign();
       broadcastToFigma({
         type: "RENDER_FLOW_MAP",
-        screens: iterScreens,
-        screenSvgs: [],
+        screens: updated.screens,
+        screenSvgs: updated.screenSvgs,
         key: currentState?.key || "KAN-1",
-        changelog: changelogInfo
+        changelog: changelogInfo,
       });
     }
     res.json({ ok: true, result: json });
@@ -654,7 +768,7 @@ app.post("/api/llm/iterate", async (req, res) => {
   }
 });
 
-// --- IntegraciÃ³n Bidireccional con Figma (Sync & Export) ---
+// --- Integración Bidireccional con Figma (Sync & Export) ---
 interface FigmaUrlParsed {
   fileKey: string;
   nodeId: string;
@@ -685,11 +799,11 @@ function parseFigmaUrl(url: string): FigmaUrlParsed | null {
 }
 
 function generateFigmaPluginScript(screens: any[]): string {
-  return `// === Generador AutomÃ¡tico de Canvas para Figma ===
+  return `// === Generador Automático de Canvas para Figma ===
 // Instrucciones en Figma Desktop:
-// 1. Ve a: Plugins â€º Development â€º Open Console (o nuevo plugin de desarrollo)
-// 2. Pega este cÃ³digo y presiona Enter.
-// 3. Los frames con Auto Layout y tokens de Uber Base aparecerÃ¡n alineados en tu lienzo.
+// 1. Ve a: Plugins > Development > Open Console (o nuevo plugin de desarrollo)
+// 2. Pega este código y presiona Enter.
+// 3. Los frames con Auto Layout y tokens de Uber Base aparecerán alineados en tu lienzo.
 (async () => {
   const screens = ${JSON.stringify(screens, null, 2)};
   await figma.loadFontAsync({ family: "Inter", style: "Regular" });
@@ -761,7 +875,7 @@ function generateFigmaPluginScript(screens: any[]): string {
     figma.currentPage.appendChild(frame);
   });
 
-  figma.notify("âœ“ " + screens.length + " pantallas de Uber Base creadas exitosamente en el lienzo de Figma.");
+  figma.notify("✓ " + screens.length + " pantallas de Uber Base creadas exitosamente en el lienzo de Figma.");
 })();`;
 }
 
@@ -777,7 +891,7 @@ app.post("/api/figma/sync", async (req, res) => {
     const parsed = parseFigmaUrl(figmaUrl);
     if (!parsed) {
       res.status(400).json({
-        error: "El enlace no es una URL vÃ¡lida de Figma. Formato esperado: https://www.figma.com/design/:file_key/:nombre?node-id=402-12"
+        error: "El enlace no es una URL válida de Figma. Formato esperado: https://www.figma.com/design/:file_key/:nombre?node-id=402-12",
       });
       return;
     }
@@ -790,7 +904,7 @@ app.post("/api/figma/sync", async (req, res) => {
       try {
         log.info(`Consultando Figma REST API: fileKey=${parsed.fileKey}, nodeId=${parsed.nodeId}`);
         const figmaRes = await fetch(`https://api.figma.com/v1/files/${parsed.fileKey}/nodes?ids=${parsed.nodeId}`, {
-          headers: { "X-Figma-Token": token }
+          headers: { "X-Figma-Token": token },
         });
         if (figmaRes.ok) {
           const figmaJson = (await figmaRes.json()) as any;
@@ -798,7 +912,7 @@ app.post("/api/figma/sync", async (req, res) => {
         }
 
         const imgRes = await fetch(`https://api.figma.com/v1/images/${parsed.fileKey}?ids=${parsed.nodeId}&format=png`, {
-          headers: { "X-Figma-Token": token }
+          headers: { "X-Figma-Token": token },
         });
         if (imgRes.ok) {
           const imgJson = (await imgRes.json()) as any;
@@ -809,58 +923,41 @@ app.post("/api/figma/sync", async (req, res) => {
       }
     }
 
-    const targetDesc = (typeof targetStep === "number" && targetStep >= 1)
-      ? `Aplica los cambios especÃ­ficamente a la Pantalla ${targetStep}.`
-      : (targetStep === "new" ? "Inserta esta pantalla como una nueva pantalla en el flujo." : "Detecta automÃ¡ticamente quÃ© pantalla del flujo debe actualizarse segÃºn los nombres de capas, nodos y notas del diseÃ±ador.");
+    const targetDesc =
+      typeof targetStep === "number" && targetStep >= 1
+        ? `Aplica los cambios específicamente a la Pantalla ${targetStep}.`
+        : targetStep === "new"
+          ? "Inserta esta pantalla como una nueva pantalla en el flujo."
+          : "Detecta automáticamente qué pantalla del flujo debe actualizarse según los nombres de capas, nodos y notas del diseñador.";
 
-    const system = "Eres el equipo de agentes de diseÃ±o autÃ³nomos de Uber (Arquitecto UX, Redactor UX, Agente de UI y QA) aplicando el sistema de diseÃ±o oficial Base Design System (tokens base.uber.com). " +
-      "Tu objetivo es sincronizar e incluir los cambios diseÃ±ados en Figma por la diseÃ±adora dentro del flujo de pantallas existente de la aplicaciÃ³n. " +
-      "Devuelve EXCLUSIVAMENTE un objeto JSON vÃ¡lido con las claves: summary, changes, agents, state. No incluyas texto fuera del JSON. " +
+    const system =
+      "Eres el equipo de agentes de diseño autónomos de Uber (Arquitecto UX, Redactor UX, Agente de UI y QA) aplicando el sistema de diseño oficial Base Design System (tokens base.uber.com). " +
+      "Tu objetivo es sincronizar e incluir los cambios diseñados en Figma por la diseñadora dentro del flujo de pantallas existente de la aplicación. " +
+      "Devuelve EXCLUSIVAMENTE un objeto JSON válido con las claves: summary, changes, agents, state. No incluyas texto fuera del JSON. " +
       "En 'state.screens' debes devolver el array completo con todas las pantallas del flujo actualizado, asegurando que cada pantalla conserve o actualice: step, shortName, stateType, stateBadge, stateDesc, navTitle, mainTitle, mainSubtitle, showMap, mapMeta, heroImage, items, cards, banner, cta, ctaVariant, ctaTargetStep, secondaryCta.";
 
-    const userPrompt = `La diseÃ±adora ha realizado ajustes en Figma y solicita incluir los cambios en el flujo de producto.\n` +
+    const userPrompt =
+      `La diseñadora ha realizado ajustes en Figma y solicita incluir los cambios en el flujo de producto.\n` +
       `- Enlace de Figma: ${figmaUrl}\n` +
       `- File Key: ${parsed.fileKey}\n` +
       `- Node ID: ${parsed.nodeId || "No especificado (archivo general)"}\n` +
-      `- Nombre de la pantalla / frame en Figma: ${parsed.fileName || "Sin tÃ­tulo especÃ­fico"}\n` +
+      `- Nombre de la pantalla / frame en Figma: ${parsed.fileName || "Sin título específico"}\n` +
       `- Pantalla de destino en el flujo: ${targetDesc}\n` +
-      `- Notas y cambios explicados por el diseÃ±ador: ${notes || "Sincronizar y adaptar la pantalla a las modificaciones hechas en Figma"}\n` +
-      (figmaData ? `- Metadatos extraÃ­dos de la API de Figma: ${JSON.stringify(figmaData).slice(0, 3000)}\n` : "") +
+      `- Notas y cambios explicados por el diseñador: ${notes || "Sincronizar y adaptar la pantalla a las modificaciones hechas en Figma"}\n` +
+      (figmaData ? `- Metadatos extraídos de la API de Figma: ${JSON.stringify(figmaData).slice(0, 3000)}\n` : "") +
       (previewImageUrl ? `- Preview PNG de Figma disponible en: ${previewImageUrl}\n` : "") +
       `\nEstado actual del flujo de pantallas:\n${JSON.stringify(currentState, null, 2)}`;
 
     const text = await complete({ system, user: userPrompt, maxTokens: 16000 });
-    let json: any;
-    try {
-      json = extractJson(text);
-    } catch (parseErr) {
-      log.warn("Figma sync: reparando JSON devuelto por el modelo...");
-      let repaired = text.trim();
-      const first = repaired.indexOf("{");
-      if (first !== -1) {
-        repaired = repaired.slice(first);
-        let openBraces = 0, openBrackets = 0;
-        for (let i = 0; i < repaired.length; i++) {
-          if (repaired[i] === "{") openBraces++;
-          else if (repaired[i] === "}") openBraces--;
-          else if (repaired[i] === "[") openBrackets++;
-          else if (repaired[i] === "]") openBrackets--;
-        }
-        while (openBrackets > 0) { repaired += "]"; openBrackets--; }
-        while (openBraces > 0) { repaired += "}"; openBraces--; }
-        json = JSON.parse(repaired);
-      } else {
-        throw parseErr;
-      }
-    }
+    const json = extractJson<any>(text);
 
     if (previewImageUrl && json?.state?.screens) {
-      const stepIdx = (typeof targetStep === "number" && targetStep >= 1) ? (targetStep - 1) : 0;
+      const stepIdx = typeof targetStep === "number" && targetStep >= 1 ? targetStep - 1 : 0;
       if (json.state.screens[stepIdx]) {
         json.state.screens[stepIdx].heroImage = {
           url: previewImageUrl,
-          alt: `DiseÃ±o sincronizado desde Figma (${parsed.fileName || "Nodo " + parsed.nodeId})`,
-          caption: `Sincronizado con Figma: ${parsed.fileName || parsed.fileKey}`
+          alt: `Diseño sincronizado desde Figma (${parsed.fileName || "Nodo " + parsed.nodeId})`,
+          caption: `Sincronizado con Figma: ${parsed.fileName || parsed.fileKey}`,
         };
       }
     }
@@ -871,7 +968,7 @@ app.post("/api/figma/sync", async (req, res) => {
       nodeId: parsed.nodeId,
       fileName: parsed.fileName,
       previewImageUrl,
-      result: json
+      result: json,
     });
   } catch (err) {
     log.error("Error en /api/figma/sync:", err);
@@ -879,21 +976,21 @@ app.post("/api/figma/sync", async (req, res) => {
   }
 });
 
-
 // Servir el SVG del flujo completo directamente como archivo descargable
-app.get("/api/figma/svg", async (req, res) => {
+app.get("/api/figma/svg", async (_req, res) => {
   try {
-    const { getLatestFigmaDesign } = await import("./integrations/figma.js");
     const latest = getLatestFigmaDesign();
-    const screens = latest.screens;
+    const screens = latest.screens || [];
     const key = latest.key || "KAN-1";
-    const frameW = 375, frameH = 812, gap = 70, padX = 80, padY = 80;
+    const frameW = 375;
+    const frameH = 812;
+    const gap = 70;
+    const padX = 80;
+    const padY = 80;
     const screensCount = screens.length;
     const totalW = padX * 2 + screensCount * frameW + (screensCount - 1) * gap + gap + 540;
     const totalH = padY * 2 + frameH + 140;
-    function esc(s: any) {
-      return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-    }
+
     const parts: string[] = [
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${totalH}" width="${totalW}" height="${totalH}">`,
       `<defs><style>text{font-family:Arial,sans-serif}</style>`,
@@ -901,75 +998,183 @@ app.get("/api/figma/svg", async (req, res) => {
       `<marker id="ar" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 1L10 5L0 9z" fill="#DE1135"/></marker>`,
       `<marker id="aw" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 1L10 5L0 9z" fill="#F69E0C"/></marker>`,
       `<filter id="sh"><feDropShadow dx="0" dy="10" stdDeviation="16" flood-opacity="0.10"/></filter></defs>`,
-      `<rect width="100%" height="100%" fill="#F4F5F6"/>`
+      `<rect width="100%" height="100%" fill="#F4F5F6"/>`,
     ];
+
     screens.forEach((s: any, idx: number) => {
-      const x = padX + idx * (frameW + gap), y = padY + 20;
-      const isE = s.stateType === "error", isC = s.stateType === "corner_case";
+      const x = padX + idx * (frameW + gap);
+      const y = padY + 20;
+      const isE = s.stateType === "error";
+      const isC = s.stateType === "corner_case";
       const tc = isE ? "#DE1135" : isC ? "#F69E0C" : "#0E8345";
       const tb = isE ? "#FDF0F2" : isC ? "#FEF6E7" : "#EBF7EE";
       const badge = s.stateBadge || (isE ? "ERROR" : isC ? "CORNER" : "HAPPY PATH");
+
       parts.push(`<g transform="translate(${x},${y})">`);
-      parts.push(`<rect x="0" y="-34" width="88" height="20" rx="4" fill="${tb}"/><text x="44" y="-20" text-anchor="middle" font-size="9" font-weight="bold" fill="${tc}">${esc(badge)}</text>`);
-      parts.push(`<text x="96" y="-20" font-size="12" font-weight="bold" fill="#000">P${idx+1} ${esc(s.shortName||s.mainTitle||"")}</text>`);
-      parts.push(`<rect width="375" height="812" rx="36" fill="#fff" stroke="#000" stroke-width="3" filter="url(#sh)"/>`);
-      parts.push(`<text x="28" y="34" font-size="12" font-weight="bold" fill="#000">9:41</text><text x="347" y="34" text-anchor="end" font-size="11" font-weight="bold" fill="#000">5G</text>`);
+      parts.push(
+        `<rect x="0" y="-34" width="88" height="20" rx="4" fill="${tb}"/><text x="44" y="-20" text-anchor="middle" font-size="9" font-weight="bold" fill="${tc}">${escapeXml(badge)}</text>`,
+      );
+      parts.push(
+        `<text x="96" y="-20" font-size="12" font-weight="bold" fill="#000">P${idx + 1} ${escapeXml(s.shortName || s.mainTitle || "")}</text>`,
+      );
+      parts.push(
+        `<rect width="375" height="812" rx="36" fill="#fff" stroke="#000" stroke-width="3" filter="url(#sh)"/>`,
+      );
+      parts.push(
+        `<text x="28" y="34" font-size="12" font-weight="bold" fill="#000">9:41</text><text x="347" y="34" text-anchor="end" font-size="11" font-weight="bold" fill="#000">5G</text>`,
+      );
       parts.push(`<text x="24" y="70" font-size="20" font-weight="bold" fill="#000">Uber</text>`);
+
       let cy = 100;
-      if (s.showMap) { parts.push(`<rect x="20" y="${cy}" width="335" height="150" rx="12" fill="#141414"/><text x="187" y="${cy+90}" text-anchor="middle" font-size="24">Map</text>`); cy += 166; }
-      parts.push(`<text x="24" y="${cy+24}" font-size="18" font-weight="bold" fill="#000">${esc(s.mainTitle||s.shortName||"")}</text>`);
-      if (s.mainSubtitle) { parts.push(`<text x="24" y="${cy+48}" font-size="13" fill="#545454">${esc(s.mainSubtitle)}</text>`); cy += 32; }
+      if (s.showMap) {
+        parts.push(
+          `<rect x="20" y="${cy}" width="335" height="150" rx="12" fill="#141414"/><text x="187" y="${cy + 90}" text-anchor="middle" font-size="24" fill="#888">Map</text>`,
+        );
+        cy += 166;
+      }
+      parts.push(
+        `<text x="24" y="${cy + 24}" font-size="18" font-weight="bold" fill="#000">${escapeXml(s.mainTitle || s.shortName || "")}</text>`,
+      );
+      if (s.mainSubtitle) {
+        parts.push(
+          `<text x="24" y="${cy + 48}" font-size="13" fill="#545454">${escapeXml(s.mainSubtitle)}</text>`,
+        );
+        cy += 32;
+      }
       cy += 36;
-      if (s.banner?.text) { parts.push(`<rect x="20" y="${cy}" width="335" height="40" rx="6" fill="${tb}" stroke="${tc}" stroke-width="1"/><text x="32" y="${cy+24}" font-size="12" font-weight="bold" fill="${tc}">${esc(String(s.banner.text).slice(0,48))}</text>`); cy += 52; }
-      if (Array.isArray(s.items)) s.items.slice(0,2).forEach((it: any) => { parts.push(`<rect x="20" y="${cy}" width="335" height="54" rx="8" fill="#fff" stroke="${it.highlight?"#000":"#E2E2E2"}" stroke-width="${it.highlight?2:1}"/><text x="36" y="${cy+32}" font-size="14" font-weight="bold" fill="#000">${esc(it.title)}</text>`); cy += 64; });
-      const bg = (isE||s.ctaVariant==="negative") ? "#DE1135" : "#000";
-      parts.push(`<rect x="20" y="732" width="335" height="48" rx="8" fill="${bg}"/><text x="187" y="761" text-anchor="middle" font-size="15" font-weight="bold" fill="#fff">${esc(s.cta||"Continuar")}</text>`);
+      if (s.banner?.text) {
+        parts.push(
+          `<rect x="20" y="${cy}" width="335" height="40" rx="6" fill="${tb}" stroke="${tc}" stroke-width="1"/><text x="32" y="${cy + 24}" font-size="12" font-weight="bold" fill="${tc}">${escapeXml(String(s.banner.text).slice(0, 48))}</text>`,
+        );
+        cy += 52;
+      }
+      if (Array.isArray(s.items)) {
+        s.items.slice(0, 2).forEach((it: any) => {
+          parts.push(
+            `<rect x="20" y="${cy}" width="335" height="54" rx="8" fill="#fff" stroke="${it.highlight ? "#000" : "#E2E2E2"}" stroke-width="${it.highlight ? 2 : 1}"/><text x="36" y="${cy + 32}" font-size="14" font-weight="bold" fill="#000">${escapeXml(it.title)}</text>`,
+          );
+          cy += 64;
+        });
+      }
+      const bg = isE || s.ctaVariant === "negative" ? "#DE1135" : "#000";
+      parts.push(
+        `<rect x="20" y="732" width="335" height="48" rx="8" fill="${bg}"/><text x="187" y="761" text-anchor="middle" font-size="15" font-weight="bold" fill="#fff">${escapeXml(s.cta || "Continuar")}</text>`,
+      );
       parts.push(`</g>`);
     });
+
     screens.forEach((s: any, idx: number) => {
-      const srcX = padX + idx * (frameW + gap) + frameW, srcY = padY + 20 + 756;
-      const tStep = (typeof s.ctaTargetStep==="number"&&s.ctaTargetStep>=1)?s.ctaTargetStep:(idx<screens.length-1?idx+2:1);
-      const tIdx = tStep - 1; if (tIdx >= screens.length) return;
-      const isE = s.stateType==="error", isC = s.stateType==="corner_case";
-      const stroke = isE?"#DE1135":isC?"#F69E0C":"#0E8345";
-      const mk = isE?"ar":isC?"aw":"ag";
-      if (tIdx===idx+1) {
+      const srcX = padX + idx * (frameW + gap) + frameW;
+      const srcY = padY + 20 + 756;
+      const tStep =
+        typeof s.ctaTargetStep === "number" && s.ctaTargetStep >= 1
+          ? s.ctaTargetStep
+          : idx < screens.length - 1
+            ? idx + 2
+            : 1;
+      const tIdx = tStep - 1;
+      if (tIdx >= screens.length) return;
+      const isE = s.stateType === "error";
+      const isC = s.stateType === "corner_case";
+      const stroke = isE ? "#DE1135" : isC ? "#F69E0C" : "#0E8345";
+      const mk = isE ? "ar" : isC ? "aw" : "ag";
+      if (tIdx === idx + 1) {
         const dstX = padX + tIdx * (frameW + gap);
-        parts.push(`<path d="M ${srcX} ${srcY} L ${dstX-6} ${srcY}" fill="none" stroke="${stroke}" stroke-width="2.5" marker-end="url(#${mk})"/>`);
-        parts.push(`<text x="${(srcX+dstX)/2}" y="${srcY-18}" text-anchor="middle" font-size="10" fill="${stroke}">${esc(String(s.cta||"").slice(0,14))}</text>`);
-      } else if (tIdx<idx) {
-        const sX=padX+idx*(frameW+gap)+frameW*0.5, eX=padX+tIdx*(frameW+gap)+frameW*0.5, dropY=padY+20+frameH+35+idx*16;
-        parts.push(`<path d="M ${sX} ${padY+20+frameH} L ${sX} ${dropY} L ${eX} ${dropY} L ${eX} ${padY+20+frameH+8}" fill="none" stroke="${stroke}" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#${mk})"/>`);
+        parts.push(
+          `<path d="M ${srcX} ${srcY} L ${dstX - 6} ${srcY}" fill="none" stroke="${stroke}" stroke-width="2.5" marker-end="url(#${mk})"/>`,
+        );
+        parts.push(
+          `<text x="${(srcX + dstX) / 2}" y="${srcY - 18}" text-anchor="middle" font-size="10" fill="${stroke}">${escapeXml(String(s.cta || "").slice(0, 14))}</text>`,
+        );
+      } else if (tIdx < idx) {
+        const sX = padX + idx * (frameW + gap) + frameW * 0.5;
+        const eX = padX + tIdx * (frameW + gap) + frameW * 0.5;
+        const dropY = padY + 20 + frameH + 35 + idx * 16;
+        parts.push(
+          `<path d="M ${sX} ${padY + 20 + frameH} L ${sX} ${dropY} L ${eX} ${dropY} L ${eX} ${padY + 20 + frameH + 8}" fill="none" stroke="${stroke}" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#${mk})"/>`,
+        );
       }
     });
-    const docX = padX + screensCount * (frameW + gap), docY = padY + 20;
+
+    const docX = padX + screensCount * (frameW + gap);
+    const docY = padY + 20;
     parts.push(`<g transform="translate(${docX},${docY})">`);
-    parts.push(`<rect width="540" height="812" rx="16" fill="#fff" stroke="#000" stroke-width="2" filter="url(#sh)"/>`);
+    parts.push(
+      `<rect width="540" height="812" rx="16" fill="#fff" stroke="#000" stroke-width="2" filter="url(#sh)"/>`,
+    );
     parts.push(`<rect x="0" y="0" width="540" height="72" rx="16" fill="#000"/>`);
-    parts.push(`<text x="24" y="30" font-size="10" font-weight="bold" fill="#888">GUIA FUNCIONAL STAKEHOLDERS</text>`);
-    parts.push(`<text x="24" y="52" font-size="15" font-weight="bold" fill="#fff">Flujo ${esc(key)}</text>`);
+    parts.push(
+      `<text x="24" y="30" font-size="10" font-weight="bold" fill="#888">GUIA FUNCIONAL STAKEHOLDERS</text>`,
+    );
+    parts.push(
+      `<text x="24" y="52" font-size="15" font-weight="bold" fill="#fff">Flujo ${escapeXml(key)}</text>`,
+    );
+
     let dy = 96;
-    parts.push(`<text x="24" y="${dy}" font-size="13" font-weight="bold" fill="#000">Objetivo y Propuesta de Valor</text>`); dy+=16;
-    parts.push(`<rect x="24" y="${dy}" width="492" height="56" rx="8" fill="#F8F9FA" stroke="#E2E2E2" stroke-width="1"/>`);
-    parts.push(`<text x="36" y="${dy+20}" font-size="11" font-weight="bold" fill="#000">Certidumbre total en el viaje.</text>`);
-    parts.push(`<text x="36" y="${dy+40}" font-size="11" fill="#545454">Precios cerrados y telemetria en tiempo real.</text>`);
-    dy+=70;
-    parts.push(`<text x="24" y="${dy}" font-size="13" font-weight="bold" fill="#000">Recorrido Paso a Paso</text>`); dy+=16;
-    [{n:"1",t:"Seleccion Servicio",b:"HAPPY",c:"#0E8345",bg:"#EBF7EE",d:"Tarifa cerrada garantizada."},{n:"2",t:"Desvio Proactivo",b:"CORNER",c:"#F69E0C",bg:"#FEF6E7",d:"50m ahorra 10min de atasco."},{n:"3",t:"Resumen Cobro",b:"HAPPY",c:"#0E8345",bg:"#EBF7EE",d:"Desglose y confirmacion pago."},{n:"4",t:"Recuperacion Error",b:"ERROR",c:"#DE1135",bg:"#FDF0F2",d:"Fallo tarjeta: Uber Cash actua."},{n:"5",t:"Conductor y PIN",b:"HAPPY",c:"#0E8345",bg:"#EBF7EE",d:"GPS vivo + PIN 7492 seguridad."}].forEach(st=>{
-      parts.push(`<rect x="24" y="${dy}" width="492" height="50" rx="6" fill="#FBFBFB" stroke="#EEE" stroke-width="1"/>`);
-      parts.push(`<rect x="34" y="${dy+7}" width="62" height="16" rx="3" fill="${st.bg}"/><text x="65" y="${dy+19}" text-anchor="middle" font-size="8" font-weight="bold" fill="${st.c}">${st.b}</text>`);
-      parts.push(`<text x="104" y="${dy+19}" font-size="12" font-weight="bold" fill="#000">${st.n}. ${esc(st.t)}</text>`);
-      parts.push(`<text x="34" y="${dy+38}" font-size="10" fill="#545454">${esc(st.d)}</text>`);
-      dy+=54;
+    parts.push(
+      `<text x="24" y="${dy}" font-size="13" font-weight="bold" fill="#000">Objetivo y Propuesta de Valor</text>`,
+    );
+    dy += 16;
+    parts.push(
+      `<rect x="24" y="${dy}" width="492" height="56" rx="8" fill="#F8F9FA" stroke="#E2E2E2" stroke-width="1"/>`,
+    );
+    parts.push(
+      `<text x="36" y="${dy + 20}" font-size="11" font-weight="bold" fill="#000">Fidelidad estricta al requerimiento de producto.</text>`,
+    );
+    parts.push(
+      `<text x="36" y="${dy + 40}" font-size="11" fill="#545454">Tokens oficiales Uber Base DS (WCAG AA y resiliencia).</text>`,
+    );
+    dy += 70;
+
+    parts.push(
+      `<text x="24" y="${dy}" font-size="13" font-weight="bold" fill="#000">Recorrido Paso a Paso</text>`,
+    );
+    dy += 16;
+
+    screens.slice(0, 5).forEach((st: any, sIdx: number) => {
+      const isE = st.stateType === "error";
+      const isC = st.stateType === "corner_case";
+      const c = isE ? "#DE1135" : isC ? "#F69E0C" : "#0E8345";
+      const bgCol = isE ? "#FDF0F2" : isC ? "#FEF6E7" : "#EBF7EE";
+      const badge = st.stateBadge || (isE ? "ERROR" : isC ? "CORNER" : "HAPPY");
+      const title = st.shortName || st.mainTitle || `Pantalla ${sIdx + 1}`;
+      const desc = st.stateDesc || st.hint || st.mainSubtitle || "Estado del flujo";
+
+      parts.push(
+        `<rect x="24" y="${dy}" width="492" height="50" rx="6" fill="#FBFBFB" stroke="#EEE" stroke-width="1"/>`,
+      );
+      parts.push(
+        `<rect x="34" y="${dy + 7}" width="62" height="16" rx="3" fill="${bgCol}"/><text x="65" y="${dy + 19}" text-anchor="middle" font-size="8" font-weight="bold" fill="${c}">${escapeXml(badge)}</text>`,
+      );
+      parts.push(
+        `<text x="104" y="${dy + 19}" font-size="12" font-weight="bold" fill="#000">${sIdx + 1}. ${escapeXml(String(title).slice(0, 38))}</text>`,
+      );
+      parts.push(
+        `<text x="34" y="${dy + 38}" font-size="10" fill="#545454">${escapeXml(String(desc).slice(0, 75))}</text>`,
+      );
+      dy += 54;
     });
-    dy+=4;
-    parts.push(`<text x="24" y="${dy}" font-size="13" font-weight="bold" fill="#000">KPIs de Impacto</text>`); dy+=16;
-    parts.push(`<rect x="24" y="${dy}" width="492" height="50" rx="8" fill="#F8F9FA" stroke="#E2E2E2" stroke-width="1"/>`);
-    parts.push(`<text x="38" y="${dy+20}" font-size="11" font-weight="bold" fill="#000">+18% Conversion</text><text x="200" y="${dy+20}" font-size="11" font-weight="bold" fill="#0E8345">-10min Espera</text><text x="360" y="${dy+20}" font-size="11" font-weight="bold" fill="#276EF1">0% Dead-ends</text>`);
-    dy+=64;
-    parts.push(`<rect x="24" y="${dy}" width="492" height="38" rx="8" fill="#EBF7EE" stroke="#B8E4C3" stroke-width="1"/>`);
-    parts.push(`<text x="36" y="${dy+23}" font-size="11" font-weight="bold" fill="#0E8345">Base DS: botones 48px r8px - Conectores 90deg</text>`);
+
+    dy += 4;
+    parts.push(
+      `<text x="24" y="${dy}" font-size="13" font-weight="bold" fill="#000">Criterios de Calidad</text>`,
+    );
+    dy += 16;
+    parts.push(
+      `<rect x="24" y="${dy}" width="492" height="50" rx="8" fill="#F8F9FA" stroke="#E2E2E2" stroke-width="1"/>`,
+    );
+    parts.push(
+      `<text x="38" y="${dy + 20}" font-size="11" font-weight="bold" fill="#000">WCAG 2.1 AA</text><text x="200" y="${dy + 20}" font-size="11" font-weight="bold" fill="#0E8345">Áreas ≥ 44px</text><text x="360" y="${dy + 20}" font-size="11" font-weight="bold" fill="#276EF1">0% Dead-ends</text>`,
+    );
+    dy += 64;
+    parts.push(
+      `<rect x="24" y="${dy}" width="492" height="38" rx="8" fill="#EBF7EE" stroke="#B8E4C3" stroke-width="1"/>`,
+    );
+    parts.push(
+      `<text x="36" y="${dy + 23}" font-size="11" font-weight="bold" fill="#0E8345">Base DS: Botones 48px/56px · Radio 8px · Conectores 90°</text>`,
+    );
     parts.push(`</g></svg>`);
+
     res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="uber_flow_${key}.svg"`);
     res.send(parts.join("\n"));
@@ -977,21 +1182,46 @@ app.get("/api/figma/svg", async (req, res) => {
     res.status(500).json({ error: String(err) });
   }
 });
+
 // Exportar pantallas y tokens listos para el lienzo de Figma
 app.post("/api/figma/export", async (req, res) => {
   try {
     const { screens, d } = req.body ?? {};
-    const { getLatestFigmaDesign } = await import("./integrations/figma.js"); const latest = getLatestFigmaDesign(); const screensList = Array.isArray(screens) && screens.length > 0 ? screens : (Array.isArray(d?.screens) && d.screens.length > 0 ? d.screens : latest.screens);
-    const pluginScript = generateFigmaPluginScript(screensList);
+    const latest = getLatestFigmaDesign();
+    const screensList =
+      Array.isArray(screens) && screens.length > 0
+        ? screens
+        : Array.isArray(d?.screens) && d.screens.length > 0
+          ? d.screens
+          : latest.screens;
+    let pluginScript = "";
     if (screensList.length > 0) {
-      const { setLatestFigmaDesign } = await import("./integrations/figma.js");
       setLatestFigmaDesign(req.body?.key || "KAN-1", screensList);
+      const updated = getLatestFigmaDesign();
+      broadcastToFigma({
+        type: "RENDER_FLOW_MAP",
+        key: updated.key,
+        screens: updated.screens,
+        screenSvgs: updated.screenSvgs,
+        changelog: updated.changelog
+      });
+      try {
+        const scriptPath = path.join(ROOT, "scripts", "figma-console-full.js");
+        const baseCode = await readFile(scriptPath, "utf8");
+        const callReplace = "await renderFlowMap([], [], 'KAN-1');";
+        const newCall = `await renderFlowMap(${JSON.stringify(updated.screens)}, ${JSON.stringify(updated.screenSvgs)}, ${JSON.stringify(updated.key || "KAN-1")}, ${JSON.stringify(updated.changelog || null)});`;
+        pluginScript = baseCode.replace(callReplace, newCall);
+      } catch {
+        pluginScript = generateFigmaPluginScript(screensList);
+      }
+    } else {
+      pluginScript = generateFigmaPluginScript(screensList);
     }
 
     res.json({
       ok: true,
       screensCount: screensList.length,
-      pluginScript
+      pluginScript,
     });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
@@ -1007,63 +1237,102 @@ app.post("/api/runs/:key/approve", async (req, res) => {
   }
 });
 
-// Endpoint para disparar el renderizado en Figma mediante MCP o API directa
+// Aprobación y Entrega Real a Desarrollo (Jira Transition + Comment, Git Branch, Figma WebSocket)
+app.post("/api/handoff/approve", async (req, res) => {
+  try {
+    const { key, version, summary, design, criteria } = req.body ?? {};
+    if (!key) {
+      res.status(400).json({ error: "Falta 'key'" });
+      return;
+    }
+    const creds = extractCredentials(req);
+    const result = await executeHandoffApprove({
+      key,
+      version: Number(version) || 1,
+      summary: summary || "Propuesta aprobada para desarrollo",
+      design: design || {},
+      criteria: Array.isArray(criteria) ? criteria : [],
+      broadcaster: broadcastToFigma,
+      jiraConfig: creds.jira,
+      figmaConfig: creds.figma,
+    });
+    res.json(result);
+  } catch (err) {
+    log.error("Error en /api/handoff/approve:", err);
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
 
-// Endpoint para disparar el renderizado del Flujo de Orquestación en Figma
+// Disparar el renderizado del Flujo de Orquestación en Figma
 app.post("/api/figma/push-orchestration", async (_req, res) => {
   try {
     const sent = broadcastToFigma({
-      type: "RENDER_ORCHESTRATION_FLOW"
+      type: "RENDER_ORCHESTRATION_FLOW",
     });
     res.json({
       ok: true,
       sentToPlugins: sent,
-      message: "Orden RENDER_ORCHESTRATION_FLOW emitida"
+      message: "Orden RENDER_ORCHESTRATION_FLOW emitida",
     });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
-app.get("/api/figma/orchestration-script", async (_req, res) => {
+app.post("/api/figma/push", async (_req, res) => {
   try {
-    const script = fs.readFileSync("scripts/render-orchestration-figma.js", "utf8");
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
-    res.send(script);
-  } catch(e) {
-    res.status(500).send("console.error('Error:', " + JSON.stringify(String(e)) + ");");
-  }
-});
-
-app.post("/api/figma/push", async (req, res) => {
-  try {
-    const { getLatestFigmaDesign } = await import("./integrations/figma.js");
     const latest = getLatestFigmaDesign();
     const sent = broadcastToFigma({
       type: "RENDER_FLOW_MAP",
       screens: latest.screens,
       screenSvgs: latest.screenSvgs,
       key: latest.key || "KAN-1",
-      changelog: latest.changelog
+      changelog: latest.changelog,
     });
     res.json({
       ok: true,
       sentToPlugins: sent,
       key: latest.key,
-      screensCount: latest.screens.length
+      screensCount: latest.screens.length,
     });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
-if (!process.env.VERCEL) {
+function getLocalIp(): string {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if (net.family === "IPv4" && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  return "localhost";
+}
+
+server.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE") {
+    log.error(`El puerto ${config.port} ya está ocupado por otro proceso. Cierra la instancia anterior o cambia PORT en .env.`);
+  } else {
+    log.error("Error en el servidor HTTP/WebSocket:", err);
+  }
+});
+
+if (!process.env.VERCEL && !process.env.TEST_MODE) {
   server.listen(config.port, "0.0.0.0", () => {
-    log.info(`Servidor activo en red local: http://192.168.0.19:${config.port}`);
+    const localIp = getLocalIp();
+    log.info(`Servidor activo en red local: http://${localIp}:${config.port}`);
     log.info(`Uber Base Design Agents escuchando en http://localhost:${config.port}`);
-    log.info(config.dryRun ? "DRY_RUN activo: no se escribirá en Jira ni en Trello." : "Modo real: se escribirá en Jira y Trello.");
-    if (config.jira.baseUrl && config.jira.email && config.jira.apiToken) { startJiraPoller(15000); }
+    log.info(
+      config.dryRun
+        ? "DRY_RUN activo: no se escribirá en Jira ni en Trello."
+        : "Modo real: se escribirá en Jira y Trello.",
+    );
+    if (config.jira.baseUrl && config.jira.email && config.jira.apiToken) {
+      startJiraPoller(15000);
+    }
   });
 }
 

@@ -41,7 +41,7 @@ Esto ejecuta los siete agentes sobre `fixtures/jira-issue-created.json` sin escr
 curl -X POST "https://api.trello.com/1/webhooks/?key=KEY&token=TOKEN" \
   -d "callbackURL=https://TU_URL/webhooks/trello" \
   -d "idModel=ID_DEL_TABLERO" \
-  -d "description=Albora Design Agents"
+  -d "description=Uber Base Design Agents"
 ```
 
 Trello hace una petición `HEAD` a la URL al crear el webhook; el servidor ya responde a ella.

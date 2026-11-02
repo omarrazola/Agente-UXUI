@@ -2,7 +2,7 @@
 
 ## Semanas 1–2 · Preparar la base
 
-- Documentar Albora DS en código (`design-system/`) y alinear nombres con la librería de Figma.
+- Documentar Uber Base DS en código (`design-system/`) y alinear nombres con la librería de Figma.
 - Conectar un proyecto de Jira o un tablero de Trello de pruebas.
 - Activar los agentes 1 y 2 (brief y contexto) y revisar su calidad con el equipo.
 

@@ -27,7 +27,7 @@ flowchart LR
 | Almacén | `src/pipeline/store.ts` | Estado de cada ejecución en `output/runs/<clave>/` (sustituible por una base de datos) |
 | Agentes | `src/agents/` + `agents/prompts/` | Definición de cada agente y sus instrucciones en Markdown |
 | Integraciones | `src/integrations/` | Jira, Trello, previsualización y Figma |
-| Albora DS | `design-system/` | Única fuente de estilos que pueden usar los agentes |
+| Uber Base DS | `design-system/` | Única fuente de estilos y componentes (@uber/baseui) que pueden usar los agentes |
 
 ## Contrato entre agentes
 

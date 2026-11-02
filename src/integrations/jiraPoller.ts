@@ -13,21 +13,34 @@ export function markIssueHandled(issueKey: string) {
   processedIssues.add(issueKey);
 }
 
-function authHeader(): string {
-  return "Basic " + Buffer.from(`${config.jira.email}:${config.jira.apiToken}`).toString("base64");
+import type { JiraConfigOverride } from "./jira.js";
+
+function authHeader(override?: JiraConfigOverride): string {
+  const email = override?.email || config.jira.email;
+  const token = override?.apiToken || config.jira.apiToken;
+  return "Basic " + Buffer.from(`${email}:${token}`).toString("base64");
 }
 
-export async function fetchJiraKanIssues(): Promise<any[]> {
-  const url = `${config.jira.baseUrl}/rest/api/3/search/jql`;
+export async function fetchJiraKanIssues(override?: JiraConfigOverride): Promise<any[]> {
+  const baseUrl = (override?.baseUrl || config.jira.baseUrl)?.replace(/\/$/, "");
+  const email = override?.email || config.jira.email;
+  const token = override?.apiToken || config.jira.apiToken;
+  const projectKey = override?.projectKey || config.jira.projectKey || "KAN";
+
+  if (!baseUrl || !email || !token) {
+    return [];
+  }
+
+  const url = `${baseUrl}/rest/api/3/search/jql`;
   const res = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: authHeader(),
+      Authorization: authHeader(override),
       Accept: "application/json",
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      jql: `project = ${config.jira.projectKey || "KAN"} ORDER BY updated DESC`,
+      jql: `project = ${projectKey} ORDER BY updated DESC`,
       fields: ["summary", "description", "labels", "reporter", "attachment", "updated", "status"]
     })
   });
@@ -40,7 +53,8 @@ export async function fetchJiraKanIssues(): Promise<any[]> {
   return data.issues || [];
 }
 
-export function toTicket(issue: any): Ticket {
+export function toTicket(issue: any, baseUrl?: string): Ticket {
+  const effectiveBaseUrl = (baseUrl || config.jira.baseUrl || "").replace(/\/$/, "");
   return {
     source: "jira",
     key: issue.key,
@@ -49,7 +63,7 @@ export function toTicket(issue: any): Ticket {
     description: adfToText(issue.fields.description).trim(),
     labels: issue.fields.labels ?? [],
     reporter: issue.fields.reporter?.displayName,
-    url: `${config.jira.baseUrl}/browse/${issue.key}`,
+    url: `${effectiveBaseUrl}/browse/${issue.key}`,
     attachments: (issue.fields.attachment ?? []).map((a: any) => a.filename ?? "").filter(Boolean),
   };
 }
@@ -65,6 +79,7 @@ export async function checkJiraUpdates() {
       // Si la tarea tiene título o descripción y no se ha procesado esta versión
       if (desc || issue.fields.summary) {
         log.info(`[JIRA POLLER] Nuevo brief detectado en ${issue.key}: "${issue.fields.summary}"`);
+        processedIssues.add(issue.key);
         processedIssues.add(updatedKey);
         const ticket = toTicket(issue);
         await startRun(ticket);

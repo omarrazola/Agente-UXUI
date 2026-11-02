@@ -1,6 +1,6 @@
 import { AGENTS, ITERATION_STEPS, agentById } from "../agents/index.js";
 import { runAgent } from "../agents/runner.js";
-import { config } from "../config.js";
+import { config, BOT_MARK } from "../config.js";
 import { pushToFigma, renderScreenSvg } from "../integrations/figma.js";
 import { writePreview } from "../integrations/preview.js";
 import { tracker } from "../integrations/tracker.js";
@@ -36,7 +36,7 @@ export async function iterate(key: string, request: string): Promise<RunState | 
     const run = await loadRun(key);
     if (!run) throw new Error(`No hay ninguna ejecución para ${key}`);
     if (run.status === "approved") {
-      await tracker.comment(run, `${"🤖"} ${key} ya está aprobado. Reabre la revisión antes de pedir cambios.`);
+      await tracker.comment(run, `${BOT_MARK} ${key} ya está aprobado. Reabre la revisión antes de pedir cambios.`);
       return run;
     }
     run.version += 1;
@@ -56,7 +56,7 @@ export async function approve(key: string): Promise<RunState | null> {
     await saveRun(run);
     await tracker.comment(
       run,
-      `${"🤖"} Versión v${run.version} aprobada y enviada a desarrollo.\n` +
+      `${BOT_MARK} Versión v${run.version} aprobada y enviada a desarrollo.\n` +
         `Previsualización: ${run.previewUrl ?? "—"}\n` +
         `Especificación: output/runs/${run.key}/v${run.version}-*.json`,
     );
@@ -100,7 +100,7 @@ async function runSteps(run: RunState, steps: StepId[], feedback?: string): Prom
 
     const delivery = run.outputs.delivery as { comment?: string } | undefined;
     const comment = delivery?.comment?.trim() || `Propuesta v${run.version} lista para revisión: ${run.previewUrl}`;
-    await tracker.comment(run, comment.startsWith("🤖") ? comment : `🤖 ${comment}`);
+    await tracker.comment(run, comment.startsWith(BOT_MARK) ? comment : `${BOT_MARK} ${comment}`);
     await tracker.moveToReview(run);
 
     run.status = "review";

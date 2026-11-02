@@ -24,4 +24,4 @@ El texto de un ticket se trata como **datos**, no como instrucciones para los ag
 
 ## Datos enviados a Claude
 
-Se envían el brief, el catálogo de Albora DS, la guía de tono y las salidas de los agentes. Revisa con el cliente las condiciones de uso de datos de la API de Claude y su política interna antes de activar el piloto.
+Se envían el brief, el catálogo de Uber Base DS, la guía de tono y las salidas de los agentes. Revisa con el cliente las condiciones de uso de datos de la API del LLM (Gemini o Claude) y su política interna antes de activar el piloto.

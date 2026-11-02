@@ -2,7 +2,7 @@ import { config } from "../config.js";
 import { log } from "../lib/logger.js";
 import type { RunState, ScreenFile } from "../types.js";
 
-function escapeXml(unsafe: any): string {
+export function escapeXml(unsafe: any): string {
   if (unsafe === null || unsafe === undefined) return "";
   return String(unsafe)
     .replace(/&/g, "&amp;")
@@ -17,28 +17,49 @@ export function renderScreenSvg(scr: any, idx: number, total: number): string {
   const isCorner = scr.stateType === "corner_case";
   const stateColor = isErr ? "#DE1135" : (isCorner ? "#F69E0C" : "#0E8345");
   const stateBg = isErr ? "#FDF0F2" : (isCorner ? "#FEF6E7" : "#EBF7EE");
-  const badgeText = scr.stateBadge || (isErr ? "CASO DE ERROR" : (isCorner ? "CORNER CASE" : "HAPPY PATH"));
 
-  let contentY = 118;
-  let bodyElements = "";
+  let contentY = 90;
+  const elements: string[] = [];
 
-  // 1. Map container
+  // 1. Hero Image (si la pantalla lo especifica)
+  if (scr.heroImage && scr.heroImage.url) {
+    const clipId = `hero-clip-${idx}-${Math.floor(Math.random() * 10000)}`;
+    elements.push(`
+      <!-- Hero Image -->
+      <g id="Hero_Image">
+        <defs>
+          <clipPath id="${clipId}">
+            <rect x="20" y="${contentY}" width="335" height="140" rx="8" />
+          </clipPath>
+        </defs>
+        <rect x="20" y="${contentY}" width="335" height="140" rx="8" fill="#141414" stroke="#E2E2E2" stroke-width="1"/>
+        <image href="${escapeXml(scr.heroImage.url)}" x="20" y="${contentY}" width="335" height="140" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>
+        ${scr.heroImage.caption ? `
+          <rect x="20" y="${contentY + 104}" width="335" height="36" fill="rgba(0,0,0,0.72)" clip-path="url(#${clipId})"/>
+          <text x="32" y="${contentY + 127}" font-family="Inter, -apple-system, sans-serif" font-size="11.5" font-weight="600" fill="#FFFFFF">${escapeXml(scr.heroImage.caption)}</text>
+        ` : ""}
+      </g>
+    `);
+    contentY += 152;
+  }
+
+  // 2. Interactive Map Container (GPS / Radar / Seguimiento)
   if (scr.showMap) {
     const mm = scr.mapMeta || {};
-    bodyElements += `
+    elements.push(`
       <!-- Map Container -->
       <g id="Map_Canvas">
-        <rect x="20" y="${contentY}" width="335" height="165" rx="12" fill="#141414" stroke="#262626" stroke-width="1"/>
-        <line x1="20" y1="${contentY + 50}" x2="355" y2="${contentY + 50}" stroke="#1F1F1F" stroke-width="1"/>
-        <line x1="20" y1="${contentY + 110}" x2="355" y2="${contentY + 110}" stroke="#1F1F1F" stroke-width="1"/>
+        <rect x="20" y="${contentY}" width="335" height="165" rx="8" fill="#141414" stroke="#262626" stroke-width="1"/>
+        <line x1="20" y1="${contentY + 48}" x2="355" y2="${contentY + 48}" stroke="#1F1F1F" stroke-width="1"/>
+        <line x1="20" y1="${contentY + 105}" x2="355" y2="${contentY + 105}" stroke="#1F1F1F" stroke-width="1"/>
         <line x1="120" y1="${contentY}" x2="120" y2="${contentY + 165}" stroke="#1F1F1F" stroke-width="1"/>
         <line x1="240" y1="${contentY}" x2="240" y2="${contentY + 165}" stroke="#1F1F1F" stroke-width="1"/>
         <!-- Route Line (Uber Blue) -->
-        <path d="M 50 ${contentY + 125} Q 150 ${contentY + 95} 210 ${contentY + 50} T 305 ${contentY + 40}" fill="none" stroke="#276EF1" stroke-width="4" stroke-dasharray="6,4"/>
-        <circle cx="50" cy="${contentY + 125}" r="6" fill="#276EF1"/>
-        <circle cx="305" cy="${contentY + 40}" r="7" fill="#000000" stroke="#FFFFFF" stroke-width="2"/>
+        <path d="M 50 ${contentY + 120} Q 150 ${contentY + 90} 210 ${contentY + 48} T 305 ${contentY + 38}" fill="none" stroke="#276EF1" stroke-width="4" stroke-dasharray="6,4"/>
+        <circle cx="50" cy="${contentY + 120}" r="6" fill="#276EF1"/>
+        <circle cx="305" cy="${contentY + 38}" r="7" fill="#000000" stroke="#FFFFFF" stroke-width="2"/>
         <!-- Vehicle icon -->
-        <g transform="translate(190, ${contentY + 55})">
+        <g transform="translate(190, ${contentY + 54})">
           <circle cx="16" cy="16" r="18" fill="rgba(39, 110, 241, 0.3)"/>
           <circle cx="16" cy="16" r="14" fill="#000000"/>
           <text x="16" y="21" text-anchor="middle" font-size="14">🚗</text>
@@ -50,102 +71,167 @@ export function renderScreenSvg(scr: any, idx: number, total: number): string {
         <rect x="275" y="${contentY + 12}" width="68" height="26" rx="6" fill="rgba(0,0,0,0.85)"/>
         <text x="309" y="${contentY + 29}" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">${escapeXml(mm.eta || "3 min")}</text>
         <!-- Driver Info Bar -->
-        <rect x="28" y="${contentY + 126}" width="319" height="30" rx="6" fill="rgba(0,0,0,0.88)"/>
-        <text x="40" y="${contentY + 146}" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#FFFFFF">${escapeXml(mm.driverName || "Carlos M.")} · ★ ${escapeXml(mm.rating || "4.95")}</text>
-        <text x="335" y="${contentY + 146}" text-anchor="end" font-family="Inter, -apple-system, sans-serif" font-size="11" fill="#AFAFAF">${escapeXml(mm.vehicle || "Toyota Corolla")}</text>
+        <rect x="28" y="${contentY + 124}" width="319" height="32" rx="6" fill="rgba(0,0,0,0.88)"/>
+        <text x="40" y="${contentY + 144}" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#FFFFFF">${escapeXml(mm.driverName || "Carlos M.")} · ★ ${escapeXml(mm.rating || "4.95")}</text>
+        <text x="335" y="${contentY + 144}" text-anchor="end" font-family="Inter, -apple-system, sans-serif" font-size="11" fill="#AFAFAF">${escapeXml(mm.vehicle || "Toyota Corolla")}</text>
       </g>
-    `;
-    contentY += 178;
+    `);
+    contentY += 177;
   }
 
-  // 2. Main Title and Subtitle
-  bodyElements += `
-    <text x="24" y="${contentY + 22}" font-family="Inter, -apple-system, sans-serif" font-size="20" font-weight="800" fill="#000000">${escapeXml(scr.mainTitle || scr.shortName || "Pantalla")}</text>
-  `;
-  contentY += 32;
+  // 3. Main Title and Subtitle
+  elements.push(`
+    <text x="24" y="${contentY + 18}" font-family="Inter, -apple-system, sans-serif" font-size="19" font-weight="800" fill="#000000">${escapeXml(scr.mainTitle || scr.shortName || "Pantalla")}</text>
+  `);
+  contentY += 26;
 
-  if (scr.mainSubtitle) {
-    bodyElements += `
-      <text x="24" y="${contentY + 14}" font-family="Inter, -apple-system, sans-serif" font-size="12.5" font-weight="400" fill="#545454">${escapeXml(scr.mainSubtitle)}</text>
-    `;
-    contentY += 26;
+  if (scr.mainSubtitle || scr.hint) {
+    const subText = scr.mainSubtitle || scr.hint;
+    elements.push(`
+      <text x="24" y="${contentY + 12}" font-family="Inter, -apple-system, sans-serif" font-size="12.5" font-weight="400" fill="#545454">${escapeXml(subText)}</text>
+    `);
+    contentY += 22;
   }
 
-  // 3. Banner
+  // 4. Banner (Alert / Notification)
   if (scr.banner && scr.banner.text) {
-    bodyElements += `
+    const bTone = scr.banner.tone || (isErr ? "negative" : isCorner ? "warning" : "info");
+    const bBg = bTone === "negative" ? "#FDF0F2" : (bTone === "warning" ? "#FEF6E7" : "#EBF7EE");
+    const bStroke = bTone === "negative" ? "#DE1135" : (bTone === "warning" ? "#F69E0C" : "#0E8345");
+    const bIcon = bTone === "negative" ? "⚠️ " : (bTone === "warning" ? "⚡ " : "ℹ️ ");
+
+    elements.push(`
       <g id="Banner">
-        <rect x="20" y="${contentY}" width="335" height="40" rx="8" fill="${stateBg}" stroke="${stateColor}" stroke-width="1.5"/>
-        <text x="34" y="${contentY + 25}" font-family="Inter, -apple-system, sans-serif" font-size="11.5" font-weight="600" fill="${stateColor}">${escapeXml(scr.banner.text.slice(0, 52))}</text>
+        <rect x="20" y="${contentY}" width="335" height="40" rx="8" fill="${bBg}" stroke="${bStroke}" stroke-width="1.2"/>
+        <text x="32" y="${contentY + 25}" font-family="Inter, -apple-system, sans-serif" font-size="11.5" font-weight="600" fill="${bStroke}">${bIcon}${escapeXml(scr.banner.text)}</text>
       </g>
-    `;
+    `);
     contentY += 48;
   }
 
-  // 4. Items / Vehicle Cards
-  const items = Array.isArray(scr.items) && scr.items.length > 0 ? scr.items : [];
+  // 5. Items / Catalog / Service Options (All items preserved)
+  const items = Array.isArray(scr.items) ? scr.items : [];
   if (items.length > 0) {
-    items.slice(0, 3).forEach((it: any) => {
+    items.forEach((it: any, itIdx: number) => {
       const isHl = Boolean(it.highlight);
       const strokeCol = isHl ? (isErr ? "#DE1135" : "#000000") : "#E2E2E2";
       const strokeW = isHl ? "2" : "1";
-      const bgCol = isHl ? "#FFFFFF" : "#FAFAFA";
+      const itTitle = it.title || it.name || it.label || it.vehicle || `Opción ${itIdx + 1}`;
+      const itSubtitle = it.subtitle || it.desc || it.description || "";
+      const itPrice = it.price || it.cost || it.amount || "";
       const iconText = it.icon || (isErr ? "💳" : (scr.showMap ? "📍" : "🚗"));
 
-      bodyElements += `
-        <g id="Item_Card" transform="translate(20, ${contentY})">
-          <rect width="335" height="58" rx="10" fill="${bgCol}" stroke="${strokeCol}" stroke-width="${strokeW}"/>
-          <!-- Icon box -->
-          <rect x="12" y="11" width="36" height="36" rx="8" fill="${stateBg}"/>
+      elements.push(`
+        <g id="Item_${itIdx + 1}" transform="translate(20, ${contentY})">
+          <rect width="335" height="58" rx="8" fill="#FFFFFF" stroke="${strokeCol}" stroke-width="${strokeW}"/>
+          <rect x="12" y="11" width="36" height="36" rx="8" fill="${isErr ? "#FDF0F2" : "#F6F6F6"}"/>
           <text x="30" y="35" text-anchor="middle" font-size="18">${escapeXml(iconText)}</text>
-          <!-- Item Title -->
-          <text x="58" y="27" font-family="Inter, -apple-system, sans-serif" font-size="13.5" font-weight="700" fill="#000000">${escapeXml(it.title || it.name || "Opción")}</text>
-          <!-- Item Subtitle -->
-          <text x="58" y="44" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="400" fill="#545454">${escapeXml(it.subtitle || it.desc || "")}</text>
-          <!-- Price -->
-          ${it.price ? `<text x="320" y="35" text-anchor="end" font-family="Inter, -apple-system, sans-serif" font-size="14" font-weight="700" fill="#000000">${escapeXml(it.price)}</text>` : ""}
+          <text x="58" y="26" font-family="Inter, -apple-system, sans-serif" font-size="13.5" font-weight="700" fill="#000000">${escapeXml(itTitle)}</text>
+          ${itSubtitle ? `<text x="58" y="43" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="400" fill="#545454">${escapeXml(itSubtitle)}</text>` : ""}
+          ${itPrice ? `<text x="320" y="35" text-anchor="end" font-family="Inter, -apple-system, sans-serif" font-size="14" font-weight="700" fill="#000000">${escapeXml(itPrice)}</text>` : ""}
         </g>
-      `;
+      `);
       contentY += 66;
     });
   }
 
-  // 5. Metric Cards (PIN, Matrícula, ETA)
-  const cards = Array.isArray(scr.cards) && scr.cards.length > 0 ? scr.cards : [];
+  // 6. Metric Cards (PIN, Matrícula, ETA)
+  const cards = Array.isArray(scr.cards) ? scr.cards : [];
   if (cards.length > 0) {
-    bodyElements += `<g id="Metric_Cards" transform="translate(20, ${contentY})">`;
     const colW = (335 - 10) / 2;
+    elements.push(`<g id="Metric_Cards" transform="translate(20, ${contentY})">`);
     cards.slice(0, 2).forEach((c: any, cIdx: number) => {
       const cX = cIdx * (colW + 10);
-      bodyElements += `
+      const cdLabel = c.label || c.title || c.key || "Detalle";
+      const cdVal = c.value || c.subtitle || c.val || "";
+      const isValErr = isErr && /fallo|error|rechazad/i.test(cdVal);
+
+      elements.push(`
         <rect x="${cX}" y="0" width="${colW}" height="54" rx="8" fill="#F6F6F6"/>
-        <text x="${cX + colW / 2}" y="20" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#757575">${escapeXml(c.label)}</text>
-        <text x="${cX + colW / 2}" y="42" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="15" font-weight="800" fill="#000000">${escapeXml(c.value)}</text>
-      `;
+        <text x="${cX + colW / 2}" y="20" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#545454">${escapeXml(cdLabel)}</text>
+        <text x="${cX + colW / 2}" y="42" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="15" font-weight="800" fill="${isValErr ? "#DE1135" : "#000000"}">${escapeXml(cdVal)}</text>
+      `);
     });
-    bodyElements += `</g>`;
-    contentY += 62;
+    elements.push(`</g>`);
+    contentY += 64;
   }
 
-  // 6. Bottom CTA Button (Fixed at y=724)
-  const ctaBg = (isErr || scr.ctaVariant === "negative") ? "#DE1135" : "#000000";
+  // 7. Sticky Bottom Footer (Barra inferior con botones CTA sticky de Uber Base DS)
+  const isCtaErr = isErr || scr.ctaVariant === "negative";
+  const ctaBg = isCtaErr ? "#DE1135" : "#000000";
   let ctaLabel = scr.cta || (idx < total - 1 ? "Continuar" : "Finalizar");
   if (/simul/i.test(ctaLabel)) {
-    ctaLabel = isErr ? "Reintentar" : (idx < total - 1 ? "Continuar" : "Finalizar");
+    ctaLabel = isErr ? "Reintentar operación" : (idx < total - 1 ? "Continuar" : "Finalizar");
   }
   const ctaIcon = isErr ? "↺" : "➔";
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 375 812" width="375" height="812">
+  const hasSecondary = Boolean(
+    scr.secondaryCta &&
+    (scr.secondaryCta.text || typeof scr.secondaryCta === "string") &&
+    !/simul/i.test(scr.secondaryCta.text || scr.secondaryCta)
+  );
+
+  const footerHeight = hasSecondary ? 134 : 92;
+  const totalFrameH = 812;
+  const footerY = totalFrameH - footerHeight;
+
+  let footerButtons = "";
+  if (hasSecondary) {
+    const secText = typeof scr.secondaryCta === "string" ? scr.secondaryCta : scr.secondaryCta.text;
+    const isTertiary = scr.secondaryCta.variant === "tertiary";
+    const secBg = isTertiary ? "#FFFFFF" : "#EEEEEE";
+    const secStroke = isTertiary ? `stroke="#E2E2E2" stroke-width="1"` : "";
+
+    footerButtons = `
+      <!-- Primary Action Button (Uber Base DS CTA) -->
+      <g id="CTA_Button" transform="translate(20, ${footerY + 12})">
+        <rect width="335" height="48" rx="8" fill="${ctaBg}"/>
+        <text x="167.5" y="30" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">${escapeXml(ctaLabel)} ${ctaIcon}</text>
+      </g>
+      <!-- Secondary Action Button -->
+      <g id="Secondary_CTA_Button" transform="translate(20, ${footerY + 68})">
+        <rect width="335" height="40" rx="8" fill="${secBg}" ${secStroke}/>
+        <text x="167.5" y="25" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="13.5" font-weight="600" fill="#000000">${escapeXml(secText)}</text>
+      </g>
+    `;
+  } else {
+    footerButtons = `
+      <!-- Primary Action Button (Uber Base DS CTA) -->
+      <g id="CTA_Button" transform="translate(20, ${footerY + 14})">
+        <rect width="335" height="48" rx="8" fill="${ctaBg}"/>
+        <text x="167.5" y="30" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">${escapeXml(ctaLabel)} ${ctaIcon}</text>
+      </g>
+    `;
+  }
+
+  const stickyFooter = `
+    <!-- Sticky Footer Container (position: sticky; bottom: 0) -->
+    <g id="Sticky_Footer_Bar">
+      <!-- White background & border-top matching .al-sticky -->
+      <rect x="0" y="${footerY}" width="375" height="${footerHeight}" fill="#FFFFFF"/>
+      <line x1="0" y1="${footerY}" x2="375" y2="${footerY}" stroke="#E2E2E2" stroke-width="1"/>
+      ${footerButtons}
+      <!-- iOS Home Indicator bar -->
+      <rect x="120" y="${totalFrameH - 14}" width="135" height="5" rx="2.5" fill="#000000"/>
+    </g>
+  `;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 375 ${totalFrameH}" width="375" height="${totalFrameH}">
     <!-- Frame Background with Phone Bezel -->
-    <rect width="375" height="812" rx="36" fill="#FFFFFF" stroke="#000000" stroke-width="4"/>
+    <rect width="375" height="${totalFrameH}" rx="36" fill="#FFFFFF" stroke="#000000" stroke-width="3"/>
     
     <!-- iOS Status Bar -->
     <text x="32" y="32" font-family="Inter, -apple-system, sans-serif" font-size="13" font-weight="700" fill="#000000">9:41</text>
     <text x="343" y="32" text-anchor="end" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="700" fill="#000000">●●● 5G</text>
 
-    <!-- Header: Uber Logo & Step Counter -->
-    <text x="24" y="66" font-family="Inter, -apple-system, sans-serif" font-size="20" font-weight="900" fill="#000000">Uber</text>
-    <text x="351" y="66" text-anchor="end" font-family="Inter, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#545454">${escapeXml(scr.navTitle || ("Paso " + (idx + 1)))} · ${idx + 1}/${total}</text>
+    <!-- Header: Back Button & Uber Logo & Step Counter -->
+    ${idx > 0 ? `
+      <text x="24" y="66" font-family="Inter, -apple-system, sans-serif" font-size="20" font-weight="700" fill="#000000">‹</text>
+      <text x="44" y="66" font-family="Inter, -apple-system, sans-serif" font-size="20" font-weight="900" fill="#000000">Uber</text>
+    ` : `
+      <text x="24" y="66" font-family="Inter, -apple-system, sans-serif" font-size="20" font-weight="900" fill="#000000">Uber</text>
+    `}
+    <text x="351" y="66" text-anchor="end" font-family="Inter, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#545454">${escapeXml(scr.navTitle || ("Paso " + (idx + 1)))}</text>
 
     <!-- Step Progress Dots (Official Uber Base mobile) -->
     <g id="Step_Dots" transform="translate(24, 76)">
@@ -157,18 +243,11 @@ export function renderScreenSvg(scr: any, idx: number, total: number): string {
       }).join("")}
     </g>
 
-    <!-- State Badge Tag -->
-    <rect x="24" y="86" width="112" height="22" rx="5" fill="${stateBg}"/>
-    <text x="80" y="101" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="10" font-weight="800" fill="${stateColor}">${escapeXml(badgeText)}</text>
-
     <!-- Dynamic Content Body -->
-    ${bodyElements}
+    ${elements.join("\n")}
 
-    <!-- Bottom Action Button (Uber Base DS Official Button) -->
-    <g id="CTA_Button" transform="translate(20, 732)">
-      <rect width="335" height="48" rx="8" fill="${ctaBg}"/>
-      <text x="167.5" y="30" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">${escapeXml(ctaLabel)} ${ctaIcon}</text>
-    </g>
+    <!-- Sticky Footer Bar at Bottom -->
+    ${stickyFooter}
   </svg>`;
 }
 

@@ -1,87 +1,75 @@
-# Albora Design Agents
+# Albora Design Agents · UX/UI AI Studio
 
-Sistema de agentes que acompaña al equipo de diseño UX/UI desde que llega una petición en **Jira** o **Trello** hasta que hay pantallas codificadas listas para revisar.
+Sistema de agentes que acompaña al equipo de diseño UX/UI desde que llega una petición en **Jira** o **Trello** hasta que hay pantallas interactivas codificadas con componentes y tokens oficiales de **Uber Base Design System** listas para revisar y aprobar.
 
-> Caso de ejemplo para **Hoteles Albora** (cadena hotelera ficticia) y su agencia de diseño **Estudio Norte**. El sistema de diseño, los datos y las personas son inventados.
+## Características Principales
 
-## Qué hace
+- **Equipo de 7 agentes especializados**: Analista de brief, Agente de contexto, Arquitecto UX, Redactor UX, Agente de UI, Revisor QA y Agente de entrega.
+- **Tokens y Componentes BaseUI (@uber/baseui)**: 100% tokens W3C, accesibilidad WCAG 2.1 AA y flujos sin callejones sin salida.
+- **Modo BYOK (Bring Your Own Keys)**: Cada usuario puede ingresar sus propias claves de **Google Gemini**, **Anthropic Claude**, **Jira Cloud** o **Figma** directamente desde la interfaz web. Las claves se guardan únicamente en el `localStorage` del navegador y viajan en cabeceras cifradas por sesión, protegiendo las cuotas personales y la privacidad de cada usuario.
+- **Sincronización con Figma**: Exportación de vectores de pantalla, scripts de consola para Figma y WebSocket en tiempo real.
+- **Handoff a Desarrollo**: Transición de tickets en Jira hacia *To Review*, generación de especificación JSON, diagrama Mermaid y código React.
 
-Cada vez que se abre una petición de diseño:
-
-1. **Jira o Trello** envían un webhook al orquestador.
-2. El **orquestador** convierte el ticket o la tarjeta en un brief común y lanza la cadena de agentes.
-3. **Siete agentes** trabajan en orden, cada uno sobre el resultado del anterior:
-
-| # | Agente | Entrega |
-|---|--------|---------|
-| 1 | Analista de brief | Brief estructurado y preguntas abiertas |
-| 2 | Agente de contexto | Hallazgos y componentes de Albora DS reutilizables |
-| 3 | Arquitecto UX | Flujo, historias de usuario y criterios de aceptación |
-| 4 | Redactor UX | Textos de interfaz con el tono de Albora |
-| 5 | Agente de UI | Pantallas en HTML usando solo tokens y componentes de Albora DS |
-| 6 | Revisor QA | Informe de accesibilidad y coherencia, con correcciones |
-| 7 | Agente de entrega | Comentario en el ticket, cambio de estado y previsualización |
-
-4. La **diseñadora** revisa la propuesta, pide cambios desde el propio ticket y aprueba la versión final para desarrollo.
-
-Los agentes **nunca** aprueban ni publican en producción: preparan un punto de partida.
-
-## Estructura del repositorio
-
-```
-albora-design-agents/
-├── agents/                 Instrucciones de cada agente (editables sin tocar código)
-│   └── prompts/
-├── demo/                   Demo interactiva para presentar al cliente (un solo HTML)
-├── design-system/          Albora DS: tokens, CSS, componentes y guías
-│   ├── tokens/
-│   ├── css/
-│   ├── components/
-│   └── guidelines/
-├── docs/                   Arquitectura, agentes, puesta en marcha, piloto y seguridad
-├── fixtures/               Webhooks de ejemplo de Jira y Trello
-├── screens/                Pantallas generadas por ticket (ejemplo: ALB-482)
-├── scripts/                Utilidades para ejecutar el flujo en local
-├── src/                    Orquestador (Node + TypeScript)
-│   ├── agents/
-│   ├── integrations/
-│   ├── lib/
-│   ├── pipeline/
-│   └── webhooks/
-└── templates/              Plantillas de brief y de comentario en el ticket
-```
+---
 
 ## Puesta en marcha rápida
 
+### 1. Clonar e instalar dependencias
+
 ```bash
+git clone https://github.com/omarrazola/Agente-UXUI.git
+cd Agente-UXUI
 npm install
-cp .env.example .env        # añade GEMINI_API_KEY (recomendado en Antigravity) o ANTHROPIC_API_KEY
-npm run demo:local          # ejecuta la cadena completa con el ticket de ejemplo, sin tocar Jira ni Trello
 ```
 
-> **Modo demo sin API Key:** Si aún no has añadido ninguna clave en `.env`, el sistema funciona automáticamente en modo `mock` para que puedas probar la cadena completa de los 7 agentes y generar las pantallas de inmediato.
-
-El resultado se guarda en `output/runs/ALB-482/` (un JSON por agente) y las pantallas en `output/previews/ALB-482/`.
-
-Para recibir webhooks reales:
+### 2. Variables de entorno (Opcional si usas el panel web BYOK)
 
 ```bash
-npm run dev                 # servidor en http://localhost:8787
+cp .env.example .env
 ```
 
-Los pasos para conectar Jira, Trello y la previsualización están en [`docs/setup.md`](docs/setup.md).
+> **Nota para producción:** No necesitas configurar tus claves personales en el servidor `.env` en producción. Los usuarios pueden introducir sus propias API keys directamente desde el botón **🔑 Configurar API Keys** de la barra de navegación web.
+
+### 3. Iniciar el servidor
+
+```bash
+npm run dev
+```
+
+Abre [http://localhost:8787](http://localhost:8787) en tu navegador.
+
+---
+
+## Configuración de Claves (BYOK) desde la Web
+
+Haz clic en el botón **🔑 Configurar API Keys** en la cabecera para configurar:
+1. **Modelos de IA**:
+   - **Google Gemini**: Obtén tu API Key gratuita en [Google AI Studio](https://aistudio.google.com/app/api-keys).
+   - **Anthropic Claude**: En [Anthropic Console](https://console.anthropic.com/settings/keys).
+2. **Jira Cloud**:
+   - URL base (ej. `https://tu-empresa.atlassian.net`).
+   - Email de la cuenta Atlassian.
+   - API Token generado en [Atlassian Security](https://id.atlassian.com/manage-profile/security/api-tokens).
+   - Clave de proyecto (`KAN`, `DES`, etc.).
+3. **Figma**:
+   - Personal Access Token de Figma generado en Settings.
+   - URL del archivo de destino.
+
+Cada pestaña incluye un botón **⚡ Probar conexión** para validar tus credenciales en tiempo real antes de utilizarlas.
+
+---
 
 ## Documentación
 
+- [🐣 Guía de Inicio Rápido (No técnicos)](docs/guia-inicio-no-tecnicos.md)
 - [Arquitectura](docs/architecture.md)
 - [Agentes y Organigrama](docs/agents.md)
 - [Puesta en marcha](docs/setup.md)
 - [Plan de piloto](docs/pilot-plan.md)
 - [Seguridad y datos](docs/security.md)
-- [Albora DS](design-system/README.md)
 
-## Demo
+---
 
-Abre `demo/index.html` en el navegador. Simula el flujo completo, incluye el prototipo navegable, la iteración con los agentes y la aprobación para desarrollo.
+## Licencia y Uso
 
-> La iteración en vivo de la demo usa Claude solo cuando la página se abre como artifact en claude.ai. Abierta en local funciona en modo demo con cambios predefinidos.
+Privado / Uso interno para aceleración de producto y diseño UX/UI.
