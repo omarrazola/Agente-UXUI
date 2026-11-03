@@ -224,7 +224,7 @@ button{font:inherit;cursor:pointer}
   align-items: center !important;
   justify-content: space-between !important;
   gap: 8px !important;
-  margin: 0 auto 24px auto !important;
+  margin: 0 auto 16px auto !important;
   flex-wrap: nowrap !important;
   width: 100% !important;
   max-width: 1240px !important;
@@ -232,6 +232,27 @@ button{font:inherit;cursor:pointer}
   border: none !important;
   box-shadow: none !important;
   padding: 0 !important;
+}
+
+/* Fila de retroceso (Volver) justo debajo del stepper, justificada a la izquierda */
+.stepper-back-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto 16px auto;
+  padding: 0;
+  animation: fadeInBackBar 0.2s ease-in-out;
+}
+@keyframes fadeInBackBar {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.stepper-back-bar .btn.sm {
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 .uj-step {
   flex: 1 1 0 !important;
@@ -2697,7 +2718,7 @@ h1 {
   </div>
 
   <!-- Stepper de Flujo en 4 Fases (Informativo, 1 sola línea horizontal) -->
-  <div class="user-journey-stepper" role="region" aria-label="Flujo de la herramienta en 4 fases" style="width: 100%; max-width: 1240px; margin: 0 auto 24px auto;">
+  <div class="user-journey-stepper" role="region" aria-label="Flujo de la herramienta en 4 fases" style="width: 100%; max-width: 1240px; margin: 0 auto 16px auto;">
     <div class="uj-step active" id="ujStep1">
       <div class="uj-badge">1</div>
       <div class="uj-content">
@@ -2728,6 +2749,30 @@ h1 {
         <strong>4. Prototipo</strong>
         <span>Visor & Figma</span>
       </div>
+    </div>
+  </div>
+
+  <!-- Barra de retroceso (Volver) justo debajo del stepper (justificada a la izquierda) -->
+  <div class="stepper-back-bar" id="stepperBackBar" style="display:none">
+    <!-- Fase 2: Volver al Briefing -->
+    <button type="button" class="btn sm" id="stepperBackPhase2" onclick="window.switchPhase && window.switchPhase(1)" title="Volver al briefing anterior" style="display:none">
+      ← Volver al Briefing
+    </button>
+    <!-- Fase 3: Volver a Agentes -->
+    <button type="button" class="btn sm" id="stepperBackPhase3" onclick="window.switchPhase && window.switchPhase(2)" title="Volver a seleccionar los agentes" style="display:none">
+      ← Volver a Agentes
+    </button>
+    <!-- Fase 4: Volver a Orquestador / Volver a Agentes / Volver al Briefing -->
+    <div id="stepperBackPhase4" style="display:none; align-items:center; gap:8px;">
+      <button type="button" class="btn sm" onclick="window.switchPhase && window.switchPhase(3)" title="Volver a la orquestación">
+        ← Volver a Orquestador
+      </button>
+      <button type="button" class="btn sm" onclick="window.switchPhase && window.switchPhase(2)" title="Volver a la selección de agentes">
+        ← Volver a Agentes
+      </button>
+      <button type="button" class="btn sm" onclick="window.switchPhase && window.switchPhase(1)" title="Volver al briefing anterior">
+        ← Volver al Briefing
+      </button>
     </div>
   </div>
 
@@ -2843,11 +2888,6 @@ h1 {
             <h2 style="font-size: 16px; margin:0">Configuración del Equipo de Agentes</h2>
             <span style="font-size: 12px; color:var(--muted)">Selecciona los agentes que resolverán el ticket seleccionado</span>
           </div>
-        </div>
-        <div style="display:inline-flex;gap:8px">
-          <button type="button" class="btn sm" onclick="window.switchPhase && window.switchPhase(1)" title="Volver al briefing anterior">
-            ← Volver al Briefing
-          </button>
         </div>
       </div>
 
@@ -3113,7 +3153,6 @@ h1 {
           <h2>3. Orquestador trabajando</h2>
         </div>
         <div style="display:inline-flex;gap:6px;margin-left:auto">
-          <button type="button" class="btn sm" onclick="window.switchPhase && window.switchPhase(2)" title="Volver a seleccionar los agentes">← Volver a Agentes</button>
           <button type="button" class="btn sm" id="btnViewResults" disabled onclick="window.switchPhase && window.switchPhase(4)" title="El diseño se mostrará al finalizar la orquestación" style="opacity:0.45; cursor:not-allowed; pointer-events:none; transition:all 0.2s ease;">Ver diseño creado ➔</button>
         </div>
         <div class="seg" role="group" aria-label="Modo de visualización del orquestador">
@@ -3250,7 +3289,6 @@ h1 {
         <h2>4. Prototipo y Entregables: Pantallas y Prototipo interactivo</h2>
       </div>
       <div style="display:inline-flex;gap:8px;margin-left:auto">
-        <button type="button" class="btn sm" onclick="window.switchPhase && window.switchPhase(3)" title="Ver la orquestación">← Ver orquestación</button>
         <button type="button" class="btn sm" onclick="window.switchPhase && window.switchPhase(1)" title="Editar o redactar nuevo brief">✏️ Nuevo briefing</button>
       </div>
       <p>Prototipo interactivo codificado con tokens y componentes oficiales de Uber Base. Puedes navegar por las pantallas en el móvil, pedir ajustes a los agentes y exportar los vectores a Figma.</p>
@@ -5824,6 +5862,23 @@ DRY_RUN=false</pre>
     }
   };
 
+  function updateStepperBackBar(phaseNum) {
+    var backBar = document.getElementById("stepperBackBar");
+    var b2 = document.getElementById("stepperBackPhase2");
+    var b3 = document.getElementById("stepperBackPhase3");
+    var b4 = document.getElementById("stepperBackPhase4");
+    if (!backBar) return;
+    if (phaseNum === 1 || !phaseNum) {
+      backBar.style.display = "none";
+    } else {
+      backBar.style.display = "flex";
+      if (b2) b2.style.display = (phaseNum === 2) ? "inline-flex" : "none";
+      if (b3) b3.style.display = (phaseNum === 3) ? "inline-flex" : "none";
+      if (b4) b4.style.display = (phaseNum === 4) ? "inline-flex" : "none";
+    }
+  }
+  window.updateStepperBackBar = updateStepperBackBar;
+
   function updateUserJourney(step){
     for(var i=1; i<=4; i++){
       var el = $("#ujStep"+i);
@@ -5836,6 +5891,7 @@ DRY_RUN=false</pre>
         el.className = "uj-step";
       }
     }
+    updateStepperBackBar(step);
   }
   window.updateUserJourney = updateUserJourney;
 
