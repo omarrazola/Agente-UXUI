@@ -28,71 +28,30 @@ export interface RequestCredentials {
 }
 
 /**
- * Extrae credenciales enviadas desde el navegador del usuario (headers HTTP o payload).
- * Si el usuario no envía claves, utiliza las variables de entorno de fallback del servidor (si existen).
+ * Las credenciales se obtienen exclusivamente desde el archivo .env del servidor (config).
+ * Por seguridad e integridad del proyecto, no se permite inyectar ni configurar claves desde el cliente web.
  */
-export function extractCredentials(req: Request): RequestCredentials {
-  const getHeader = (name: string): string | undefined => {
-    const val = req.headers[name.toLowerCase()];
-    if (typeof val === "string" && val.trim().length > 0) return val.trim();
-    return undefined;
-  };
-
-  const body = (req.body && typeof req.body === "object") ? req.body : {};
-
-  // LLM
-  const rawProvider = getHeader("x-llm-provider") || body.llmProvider;
-  const geminiApiKey = getHeader("x-gemini-api-key") || body.geminiApiKey || config.geminiApiKey;
-  const anthropicApiKey = getHeader("x-anthropic-api-key") || body.anthropicApiKey || config.anthropicApiKey;
-  const geminiModel = getHeader("x-gemini-model") || body.geminiModel || config.geminiModel;
-  const claudeModel = getHeader("x-claude-model") || body.claudeModel || config.model;
-
-  let llmProvider: "gemini" | "anthropic" | "mock" | undefined;
-  if (rawProvider === "gemini" || rawProvider === "anthropic" || rawProvider === "mock") {
-    llmProvider = rawProvider;
-  } else if (geminiApiKey) {
-    llmProvider = "gemini";
-  } else if (anthropicApiKey) {
-    llmProvider = "anthropic";
-  } else {
-    llmProvider = config.provider;
-  }
-
-  // Jira
-  const jiraBaseUrl = getHeader("x-jira-url") || body.jiraBaseUrl || config.jira.baseUrl;
-  const jiraEmail = getHeader("x-jira-email") || body.jiraEmail || config.jira.email;
-  const jiraApiToken = getHeader("x-jira-token") || body.jiraApiToken || config.jira.apiToken;
-  const jiraProjectKey = getHeader("x-jira-project") || body.jiraProjectKey || config.jira.projectKey;
-
-  // Trello
-  const trelloApiKey = getHeader("x-trello-key") || body.trelloApiKey || config.trello.apiKey;
-  const trelloToken = getHeader("x-trello-token") || body.trelloToken || config.trello.token;
-
-  // Figma
-  const figmaAccessToken = getHeader("x-figma-token") || body.figmaToken || body.figmaAccessToken || config.figma.accessToken;
-  const figmaFileKey = getHeader("x-figma-file-key") || body.figmaFileKey || config.figma.fileKey;
-  const figmaFileUrl = getHeader("x-figma-file-url") || body.figmaFileUrl || config.figma.fileUrl;
-
+export function extractCredentials(_req?: Request): RequestCredentials {
   return {
-    llmProvider,
-    geminiApiKey,
-    geminiModel,
-    anthropicApiKey,
-    claudeModel,
+    llmProvider: config.provider,
+    geminiApiKey: config.geminiApiKey,
+    geminiModel: config.geminiModel,
+    anthropicApiKey: config.anthropicApiKey,
+    claudeModel: config.model,
     jira: {
-      baseUrl: jiraBaseUrl ? jiraBaseUrl.replace(/\/$/, "") : undefined,
-      email: jiraEmail,
-      apiToken: jiraApiToken,
-      projectKey: jiraProjectKey || "KAN",
+      baseUrl: config.jira.baseUrl ? config.jira.baseUrl.replace(/\/$/, "") : undefined,
+      email: config.jira.email,
+      apiToken: config.jira.apiToken,
+      projectKey: config.jira.projectKey || "KAN",
     },
     trello: {
-      apiKey: trelloApiKey,
-      token: trelloToken,
+      apiKey: config.trello.apiKey,
+      token: config.trello.token,
     },
     figma: {
-      accessToken: figmaAccessToken,
-      fileKey: figmaFileKey,
-      fileUrl: figmaFileUrl,
+      accessToken: config.figma.accessToken,
+      fileKey: config.figma.fileKey,
+      fileUrl: config.figma.fileUrl,
     },
   };
 }

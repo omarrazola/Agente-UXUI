@@ -14,8 +14,10 @@ const interactiveElements = [
   { id: "tab-sistema", type: "Pestaña", name: "Sistema de diseño", action: "Navega al catálogo de Uber Base DS" },
   { id: "tab-arquitectura", type: "Pestaña", name: "Arquitectura", action: "Navega a la documentación técnica" },
   { id: "btnOpenQuickGuide", type: "Botón", name: "¿Cómo funciona?", action: "Abre modal interactivo de onboarding" },
-  { id: "btnOpenByokConfig", type: "Botón", name: "Configurar ↗ (Banner BYOK)", action: "Abre modal de configuración de API Keys" },
-  { id: "apiSettingsModal", type: "Modal", name: "Modal de Configuración de API Keys", action: "Configuración personalizada de Gemini, Jira, Figma" },
+  { id: "btnOpenAntigravityEnvHeader", type: "Botón", name: "Crear .env con Antigravity (Header)", action: "Abre modal instructivo de creación de .env con prompt" },
+  { id: "btnOpenAntigravityPromptBanner", type: "Botón", name: "Pedir a Antigravity (Banner)", action: "Abre modal de prompt para Antigravity" },
+  { id: "apiSettingsModal", type: "Modal", name: "Modal de Estado de API Keys (.env)", action: "Comprobación de estado de Gemini, Jira, Figma desde .env" },
+  { id: "antigravityEnvModal", type: "Modal", name: "Modal Informativo .env Antigravity", action: "Explicación de claves y prompt para Antigravity" },
 
   // 2. Stepper Informativo de las 4 Fases del Flujo (no clickables, 1 sola línea horizontal)
   { id: "ujStep1", type: "Indicador", name: "Paso 1: Briefing", action: "Indicador visual de progreso de Fase 1" },

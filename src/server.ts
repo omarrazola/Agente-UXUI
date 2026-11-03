@@ -166,14 +166,20 @@ app.get("/api/figma/orchestration-script", async (_req, res) => {
   }
 });
 
-// --- BYOK: Endpoints de configuración e inspección de credenciales del usuario ---
+// --- Endpoints de estado y comprobación de credenciales del archivo .env ---
 app.get("/api/config/status", (_req, res) => {
+  const envPath = path.join(ROOT, ".env");
+  const hasEnvFile = existsSync(envPath);
   res.json({
     ok: true,
     serverConfig: {
+      hasEnvFile,
       hasGemini: Boolean(config.geminiApiKey),
+      geminiModel: config.geminiModel,
       hasAnthropic: Boolean(config.anthropicApiKey),
+      claudeModel: config.model,
       hasJira: Boolean(config.jira.baseUrl && config.jira.email && config.jira.apiToken),
+      jiraProject: config.jira.projectKey,
       hasTrello: Boolean(config.trello.apiKey && config.trello.token),
       hasFigma: Boolean(config.figma.accessToken),
       activeProvider: config.provider,
@@ -184,25 +190,40 @@ app.get("/api/config/status", (_req, res) => {
 
 app.post("/api/config/test", async (req, res) => {
   try {
-    const { service, apiKey, model, baseUrl, email, apiToken, token } = req.body ?? {};
+    const { service } = req.body ?? {};
     if (service === "gemini") {
-      const result = await testGemini(apiKey, model);
+      if (!config.geminiApiKey) {
+        return res.json({ ok: false, message: "GEMINI_API_KEY no está configurada en el archivo .env" });
+      }
+      const result = await testGemini(config.geminiApiKey, config.geminiModel);
       return res.json(result);
     }
     if (service === "anthropic") {
-      const result = await testAnthropic(apiKey, model);
+      if (!config.anthropicApiKey) {
+        return res.json({ ok: false, message: "ANTHROPIC_API_KEY no está configurada en el archivo .env" });
+      }
+      const result = await testAnthropic(config.anthropicApiKey, config.model);
       return res.json(result);
     }
     if (service === "jira") {
-      const result = await testJira(baseUrl, email, apiToken || apiKey);
+      if (!config.jira.baseUrl || !config.jira.email || !config.jira.apiToken) {
+        return res.json({ ok: false, message: "Credenciales de Jira (JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN) no configuradas en el archivo .env" });
+      }
+      const result = await testJira(config.jira.baseUrl, config.jira.email, config.jira.apiToken);
       return res.json(result);
     }
     if (service === "figma") {
-      const result = await testFigma(token || apiKey);
+      if (!config.figma.accessToken) {
+        return res.json({ ok: false, message: "FIGMA_ACCESS_TOKEN no está configurado en el archivo .env" });
+      }
+      const result = await testFigma(config.figma.accessToken);
       return res.json(result);
     }
     if (service === "trello") {
-      const result = await testTrello(apiKey, token);
+      if (!config.trello.apiKey || !config.trello.token) {
+        return res.json({ ok: false, message: "Credenciales de Trello (TRELLO_API_KEY, TRELLO_TOKEN) no configuradas en el archivo .env" });
+      }
+      const result = await testTrello(config.trello.apiKey, config.trello.token);
       return res.json(result);
     }
     res.status(400).json({ ok: false, message: "Servicio no soportado: " + service });
@@ -1332,6 +1353,26 @@ if (!process.env.VERCEL && !process.env.TEST_MODE) {
     );
     if (config.jira.baseUrl && config.jira.email && config.jira.apiToken) {
       startJiraPoller(15000);
+    }
+
+    const envExists = existsSync(path.join(ROOT, ".env"));
+    if (!envExists || (!config.geminiApiKey && !config.anthropicApiKey)) {
+      console.log("\n" + "=".repeat(78));
+      console.log("⚠️  AVISO DE CONFIGURACIÓN (.env Y API KEYS)");
+      console.log("=".repeat(78));
+      console.log("Para que los agentes de diseño funcionen correctamente, debes incluir en la");
+      console.log("carpeta del proyecto el archivo .env con tus API Keys (GEMINI_API_KEY, etc.).");
+      console.log("\n🤖 ¿CÓMO PEDIRLE A ANTIGRAVITY CON UN PROMPT QUE CREE EL ARCHIVO .env?:");
+      console.log("Copia y pega este prompt en el chat de Google Antigravity:\n");
+      console.log('   "Crea el archivo .env en la raíz del proyecto basándote en .env.example');
+      console.log('    con mis siguientes API keys:');
+      console.log('    LLM_PROVIDER=gemini');
+      console.log('    GEMINI_API_KEY=tu_clave_de_gemini_aqui');
+      console.log('    JIRA_BASE_URL=https://tu-empresa.atlassian.net');
+      console.log('    JIRA_EMAIL=tu-email@empresa.com');
+      console.log('    JIRA_API_TOKEN=tu_token_jira');
+      console.log('    FIGMA_ACCESS_TOKEN=tu_token_figma"');
+      console.log("=".repeat(78) + "\n");
     }
   });
 }

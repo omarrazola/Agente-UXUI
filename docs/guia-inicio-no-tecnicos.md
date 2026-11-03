@@ -50,16 +50,27 @@ Tienes dos formas muy sencillas:
    ```
    *(Tardará unos 30-60 segundos en descargar lo necesario. Verás unas barras de progreso).*
 
-4. **Crear el archivo de configuración:**
+4. **Crear el archivo de configuración (.env):**
+   Para que la herramienta funcione necesita un archivo llamado `.env` en la carpeta raíz del proyecto con las API keys.
+
+   🤖 **La forma más fácil: Pídeselo a Google Antigravity con un prompt**
+   En el chat de Antigravity, escribe:
+   ```text
+   Crea el archivo .env en la raíz del proyecto a partir de .env.example con mis siguientes API keys:
+   GEMINI_API_KEY=tu_clave_de_gemini
+   JIRA_BASE_URL=https://tu-empresa.atlassian.net
+   JIRA_EMAIL=tu-email@empresa.com
+   JIRA_API_TOKEN=tu_token_jira
+   ```
+   ¡Y Antigravity creará el archivo por ti al instante!
+
+   *Forma manual alternativa:*
    - En esa misma carpeta verás un archivo llamado `.env.example`.
-   - Haz una copia de ese archivo y llámala simplemente `.env` (o ejecuta en la terminal: `copy .env.example .env` en Windows, o `cp .env.example .env` en Mac).
+   - Haz una copia de ese archivo y llámala `.env` (ejecuta en la terminal: `copy .env.example .env` en Windows, o `cp .env.example .env` en Mac).
    
-> 💡 **¿Necesitas clave de Inteligencia Artificial?**
-> **¡No es obligatorio para jugar!** El agente tiene un **modo simulación (mock)** automático. Si dejas el archivo `.env` tal cual está, funcionará con respuestas de prueba instantáneas sin gastar nada.
-> 
-> Si quieres que use IA real en vivo:
-> - Puedes conseguir una clave gratuita de **Google Gemini** en [aistudio.google.com/app/api-keys](https://aistudio.google.com/app/api-keys).
-> - Abre el archivo `.env` con el Bloc de notas y pégala donde dice `GEMINI_API_KEY=tu_clave_aqui`.
+> 💡 **¿Dónde conseguir tu clave de Inteligencia Artificial gratuita?**
+> - Consigue una clave gratuita de **Google Gemini** en [aistudio.google.com/app/api-keys](https://aistudio.google.com/app/api-keys).
+> - Pégala en `.env` donde dice `GEMINI_API_KEY=tu_clave_aqui`. El botón **🔑 API Keys (OK)** de la web te confirmará que está conectada.
 
 ---
 
