@@ -29,7 +29,7 @@ export const config = {
 
   jira: {
     baseUrl: env("JIRA_BASE_URL").replace(/\/$/, ""),
-    email: env("JIRA_EMAIL"),
+    email: env("JIRA_USER_EMAIL") || env("JIRA_EMAIL"),
     apiToken: env("JIRA_API_TOKEN"),
     projectKey: env("JIRA_PROJECT_KEY", "KAN"),
     webhookToken: env("JIRA_WEBHOOK_TOKEN"),

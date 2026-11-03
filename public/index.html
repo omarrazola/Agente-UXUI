@@ -5697,7 +5697,7 @@ DRY_RUN=false</pre>
   $all(".seg button").forEach(function(b){b.addEventListener("click",function(){setSrc(b.dataset.src)})});
 
   // ---------- Helper Toast y Guía de Usabilidad ----------
-  function showQuickToast(msg){
+  function showQuickToast(msg, warn){
     var t = $("#quickToast");
     if(!t){
       t = document.createElement("div");
@@ -5705,11 +5705,19 @@ DRY_RUN=false</pre>
       t.className = "quick-toast";
       document.body.appendChild(t);
     }
-    t.innerHTML = '<span>⚡</span> ' + h(msg);
+    var icon = warn ? "⚠️" : (String(msg).includes("✓") || String(msg).includes("¡") || String(msg).includes("✅") ? "✅" : "⚡");
+    t.innerHTML = '<span>' + icon + '</span> ' + h(msg);
+    if(warn){
+      t.style.background = "#D9381E";
+      t.style.color = "#FFFFFF";
+    } else {
+      t.style.background = "#000000";
+      t.style.color = "#FFFFFF";
+    }
     t.classList.add("show");
     setTimeout(function(){
       t.classList.remove("show");
-    }, 2800);
+    }, 3200);
   }
   window.showQuickToast = showQuickToast;
 
@@ -6315,10 +6323,10 @@ DRY_RUN=false</pre>
       if($("#tTitle")) $("#tTitle").textContent = chosen.title;
       if($("#agentPanelTicketTitle")) $("#agentPanelTicketTitle").textContent = chosen.title;
     }
-    if(chosen.description){
+    if(chosen.description && $("#tBody")){
       $("#tBody").innerHTML = '<p>' + h(chosen.description).replace(/\n/g, '<br>') + '</p>';
     }
-    if(chosen.reporter){
+    if(chosen.reporter && $("#tAuthor")){
       $("#tAuthor").textContent = 'Creado por ' + chosen.reporter + ' · Jira Project KAN';
     }
     if($("#tPriority")) $("#tPriority").textContent = chosen.priority || "Prioridad media";
@@ -6595,6 +6603,7 @@ DRY_RUN=false</pre>
     }
 
     var info = getBriefInfo();
+    var createdIssue = null;
     try {
       var resp = await fetch("/api/jira/create", {
         method: "POST",
@@ -6612,6 +6621,7 @@ DRY_RUN=false</pre>
       }
 
       var issue = resJson.issue;
+      createdIssue = issue;
       if($("#tKey")) $("#tKey").textContent = issue.key;
       updateJiraLink(issue.key, issue.url);
       if($("#tAuthor")) $("#tAuthor").textContent = "Creada en la herramienta · Sincronizada en Jira (" + issue.key + ")";
@@ -6627,13 +6637,22 @@ DRY_RUN=false</pre>
       // Marcar el botón como sincronizado e inactivo
       setJiraSyncState(false, issue.key, "¡Incidencia creada en Jira Cloud con éxito! Clave: <b style='color:#0E8345'>" + h(issue.key) + "</b>");
 
-      await loadJiraIssues(issue.key);
+      try {
+        await loadJiraIssues(issue.key);
+      } catch(ignore){}
+
       if(typeof toast === "function"){
         toast("¡Incidencia " + issue.key + " sincronizada con éxito en Jira Cloud!");
+      } else if(typeof showQuickToast === "function"){
+        showQuickToast("¡Incidencia " + issue.key + " sincronizada con éxito en Jira Cloud!");
       }
     } catch(e){
-      alert("Error sincronizando ticket en Jira: " + (e.message || String(e)));
-      setJiraSyncState(true);
+      if(!createdIssue){
+        alert("Error sincronizando ticket en Jira: " + (e.message || String(e)));
+        setJiraSyncState(true);
+      } else {
+        console.warn("Ticket creado en Jira pero hubo un detalle secundario en la UI:", e);
+      }
     }
   }
 
@@ -10262,7 +10281,23 @@ export default function UberBaseFlow() {
   });
 
   // ---------- Aprobación y envío a desarrollo ----------
-  function toast(msg,warn){var t=$("#toast");t.textContent=msg;t.className="toast"+(warn?" warn":"");t.hidden=false}
+  function toast(msg, warn){
+    if(typeof showQuickToast === "function"){
+      showQuickToast(msg, warn);
+      return;
+    }
+    var t = $("#toast") || $("#quickToast");
+    if(!t){
+      t = document.createElement("div");
+      t.id = "toast";
+      t.className = "quick-toast";
+      document.body.appendChild(t);
+    }
+    t.innerHTML = '<span>' + (warn ? "⚠️" : "⚡") + '</span> ' + h(msg);
+    t.className = "quick-toast show" + (warn ? " warn" : "");
+    setTimeout(function(){ if(t) t.classList.remove("show"); }, 3200);
+  }
+  window.toast = toast;
   function setLocked(on){
     locked=on;
     $("#composer").classList.toggle("locked",on);
@@ -10707,5 +10742,7 @@ export default function UberBaseFlow() {
 </script>
 
 
+<div id="toast" class="toast" hidden></div>
+<div id="quickToast" class="quick-toast"></div>
 </body>
 </html>

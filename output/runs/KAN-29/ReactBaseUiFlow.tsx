@@ -10,10 +10,10 @@ import { Banner, HIERARCHY } from "baseui/banner";
 export const SCREENS = [
   {
     "step": 1,
-    "shortName": "1 · Mapa con puntos de recarga",
+    "shortName": "1 · Mapa de puntos de recarga",
     "stateType": "happy_path",
     "mainTitle": "Puntos de recarga cercanos",
-    "mainSubtitle": "Selecciona una estación en el mapa para ver conectores y tarifas.",
+    "mainSubtitle": "3 estaciones disponibles en un radio de 2 km",
     "cta": "Ver estación seleccionada",
     "ctaVariant": "primary",
     "ctaTargetStep": 2,
@@ -24,8 +24,8 @@ export const SCREENS = [
     "step": 2,
     "shortName": "2 · Ficha plegada de estación",
     "stateType": "happy_path",
-    "mainTitle": "EcoStation Central",
-    "mainSubtitle": "Av. Principal 452 • 4 conectores libres de 6 totales",
+    "mainTitle": "Estación Central FastCharge",
+    "mainSubtitle": "A 800 m • Abierto 24/7",
     "cta": "Ver detalles y conectores",
     "ctaVariant": "primary",
     "ctaTargetStep": 3,
@@ -34,32 +34,28 @@ export const SCREENS = [
   },
   {
     "step": 3,
-    "shortName": "3 · Ficha desplegada y selección de conector",
+    "shortName": "3 · Ficha desplegada y selección",
     "stateType": "happy_path",
     "mainTitle": "Selecciona un conector",
-    "mainSubtitle": "Todos los conectores disponibles en EcoStation Central.",
+    "mainSubtitle": "Conector CCS 2 seleccionado por defecto",
     "cta": "Iniciar recarga",
     "ctaVariant": "primary",
     "ctaTargetStep": 5,
-    "secondaryCta": {
-      "text": "Simular conector ocupado",
-      "variant": "secondary",
-      "targetStep": 4
-    },
+    "secondaryCta": null,
     "banner": null
   },
   {
     "step": 4,
-    "shortName": "4 · Caso de error: Conector no disponible",
+    "shortName": "4 · Incidencia: Conector ocupado",
     "stateType": "error",
     "mainTitle": "Conector no disponible",
     "mainSubtitle": "El conector seleccionado acaba de ser ocupado por otro vehículo.",
-    "cta": "Elegir conector alternativo",
+    "cta": "Ver estación alternativa",
     "ctaVariant": "negative",
-    "ctaTargetStep": 3,
+    "ctaTargetStep": 1,
     "secondaryCta": null,
     "banner": {
-      "text": "El conector ya no está libre. Te sugerimos una alternativa cercana sin coste adicional.",
+      "text": "El conector ya no está libre. Te sugerimos una alternativa cercana.",
       "tone": "negative"
     }
   },
@@ -67,18 +63,14 @@ export const SCREENS = [
     "step": 5,
     "shortName": "5 · Recarga iniciada con éxito",
     "stateType": "happy_path",
-    "mainTitle": "¡Recarga iniciada!",
-    "mainSubtitle": "La estación está suministrando energía correctamente a tu vehículo.",
-    "cta": "Ver detalles de la sesión",
+    "mainTitle": "Recarga iniciada correctamente",
+    "mainSubtitle": "Suministrando energía a 150 kW • 22% actual",
+    "cta": "Volver al inicio",
     "ctaVariant": "primary",
     "ctaTargetStep": 1,
-    "secondaryCta": {
-      "text": "Finalizar recarga",
-      "variant": "secondary",
-      "targetStep": 1
-    },
+    "secondaryCta": null,
     "banner": {
-      "text": "Recarga conectada correctamente. Puedes detenerla en cualquier momento.",
+      "text": "Recarga en curso. Puedes detenerla en cualquier momento desde la app.",
       "tone": "positive"
     }
   }

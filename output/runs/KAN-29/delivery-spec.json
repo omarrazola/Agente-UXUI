@@ -1,8 +1,8 @@
 {
   "ticket": "KAN-29",
   "version": "v1",
-  "approvedAt": "2026-11-02T20:54:18.954Z",
-  "summary": "Se añadió un botón secundario para finalizar la recarga en la pantalla 5 cumpliendo con las directrices de Base Design System.",
+  "approvedAt": "2026-11-03T13:24:36.809Z",
+  "summary": "Flujo completo de recarga de vehículos eléctricos públicos desde la app de Uber, abriendo desde el mapa de búsqueda de puntos de recarga, visualizando la ficha detallada (plegada y desplegada), y completando el proceso de inicio de recarga con gestión de errores y confirmación de éxito.",
   "tokens": {
     "cta": "ink",
     "radius": "md",
@@ -11,11 +11,11 @@
   "screens": [
     {
       "step": 1,
-      "shortName": "1 · Mapa con puntos de recarga",
+      "shortName": "1 · Mapa de puntos de recarga",
       "stateType": "happy_path",
-      "stateDesc": "Vista de mapa principal mostrando electrolineras cercanas con disponibilidad en tiempo real",
+      "stateDesc": "Vista de mapa mostrando los puntos de recarga públicos cercanos disponibles con indicadores de potencia",
       "mainTitle": "Puntos de recarga cercanos",
-      "mainSubtitle": "Selecciona una estación en el mapa para ver conectores y tarifas.",
+      "mainSubtitle": "3 estaciones disponibles en un radio de 2 km",
       "cta": "Ver estación seleccionada",
       "ctaTargetStep": 2,
       "secondaryCta": null
@@ -24,53 +24,45 @@
       "step": 2,
       "shortName": "2 · Ficha plegada de estación",
       "stateType": "happy_path",
-      "stateDesc": "Vista inferior colapsada (BottomSheet) con resumen rápido de la estación seleccionada",
-      "mainTitle": "EcoStation Central",
-      "mainSubtitle": "Av. Principal 452 • 4 conectores libres de 6 totales",
+      "stateDesc": "Visualización preliminar de la estación seleccionada en formato ficha plegada (BottomSheet)",
+      "mainTitle": "Estación Central FastCharge",
+      "mainSubtitle": "A 800 m • Abierto 24/7",
       "cta": "Ver detalles y conectores",
       "ctaTargetStep": 3,
       "secondaryCta": null
     },
     {
       "step": 3,
-      "shortName": "3 · Ficha desplegada y selección de conector",
+      "shortName": "3 · Ficha desplegada y selección",
       "stateType": "happy_path",
-      "stateDesc": "Vista expandida del punto de recarga con listado completo de conectores y tarifas detalladas",
+      "stateDesc": "Ficha desplegada con el catálogo completo de conectores, potencias y tarifas detalladas",
       "mainTitle": "Selecciona un conector",
-      "mainSubtitle": "Todos los conectores disponibles en EcoStation Central.",
+      "mainSubtitle": "Conector CCS 2 seleccionado por defecto",
       "cta": "Iniciar recarga",
       "ctaTargetStep": 5,
-      "secondaryCta": {
-        "text": "Simular conector ocupado",
-        "variant": "secondary",
-        "targetStep": 4
-      }
+      "secondaryCta": null
     },
     {
       "step": 4,
-      "shortName": "4 · Caso de error: Conector no disponible",
+      "shortName": "4 · Incidencia: Conector ocupado",
       "stateType": "error",
-      "stateDesc": "Tratamiento de incidencia cuando el conector seleccionado se acaba de ocupar",
+      "stateDesc": "Gestión de error cuando el conector seleccionado pasa a estado ocupado justo antes de iniciar",
       "mainTitle": "Conector no disponible",
       "mainSubtitle": "El conector seleccionado acaba de ser ocupado por otro vehículo.",
-      "cta": "Elegir conector alternativo",
-      "ctaTargetStep": 3,
+      "cta": "Ver estación alternativa",
+      "ctaTargetStep": 1,
       "secondaryCta": null
     },
     {
       "step": 5,
       "shortName": "5 · Recarga iniciada con éxito",
       "stateType": "happy_path",
-      "stateDesc": "Confirmación y monitorización inicial de la sesión de recarga activa",
-      "mainTitle": "¡Recarga iniciada!",
-      "mainSubtitle": "La estación está suministrando energía correctamente a tu vehículo.",
-      "cta": "Ver detalles de la sesión",
+      "stateDesc": "Pantalla de confirmación y monitorización del inicio de la recarga eléctrica",
+      "mainTitle": "Recarga iniciada correctamente",
+      "mainSubtitle": "Suministrando energía a 150 kW • 22% actual",
+      "cta": "Volver al inicio",
       "ctaTargetStep": 1,
-      "secondaryCta": {
-        "text": "Finalizar recarga",
-        "variant": "secondary",
-        "targetStep": 1
-      }
+      "secondaryCta": null
     }
   ],
   "components": [
